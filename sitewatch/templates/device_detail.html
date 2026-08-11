@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h4>{{ device.hostname }} — {{ device.mgmt_ip }}</h4>
+<p>
+  Site: <a href="{{ url_for('sites.site_detail', site_id=device.site_id) }}">{{ device.site.name }}</a> |
+  Vendor: {{ device.vendor }} |
+  Reachable: {% if device.reachable %}<span class="badge bg-success">yes</span>{% else %}<span class="badge bg-primary">unreachable</span>{% endif %} |
+  Last walked: {{ device.last_walked_at or 'never' }}
+</p>
+<form method="post" action="{{ url_for('devices.walk_device', device_id=device.id) }}" class="mb-3">
+  <button class="btn btn-outline-primary">Walk now</button>
+</form>
+
+<table class="table table-sm">
+  <thead><tr><th>Index</th><th>Descr</th><th>Alias</th><th>Speed</th><th>Oper</th><th>Admin</th></tr></thead>
+  <tbody>
+    {% for i in device.interfaces %}
+    <tr><td>{{ i.if_index }}</td><td>{{ i.if_descr }}</td><td>{{ i.if_alias }}</td>
+        <td>{{ i.if_speed_bps }}</td><td>{{ i.oper_status }}</td><td>{{ i.admin_status }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

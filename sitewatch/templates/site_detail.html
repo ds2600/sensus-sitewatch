@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h4>{{ site.name }} <span class="badge bg-{{ 'success' if status=='green' else ('warning' if status=='yellow' else 'danger') }}">{{ status }}</span></h4>
+
+<h5 class="mt-4">Devices</h5>
+<ul class="list-group mb-4">
+  {% for d in devices %}
+  <li class="list-group-item"><a href="{{ url_for('devices.device_detail', device_id=d.id) }}">{{ d.hostname }}</a> — {{ d.mgmt_ip }}</li>
+  {% endfor %}
+</ul>
+
+<h5>Intra-site circuits</h5>
+<table class="table table-sm mb-4">
+  <tbody>
+    {% for c in intra_site_circuits %}
+    <tr><td><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a></td>
+        <td><span class="badge bg-secondary">{{ c.current_state }}</span></td></tr>
+    {% else %}<tr><td class="text-muted">None.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h5>External circuits</h5>
+<table class="table table-sm">
+  <tbody>
+    {% for c in external_circuits %}
+    <tr><td><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a></td>
+        <td>{{ c.role.name }}</td>
+        <td><span class="badge bg-secondary">{{ c.current_state }}</span></td></tr>
+    {% else %}<tr><td class="text-muted">None.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

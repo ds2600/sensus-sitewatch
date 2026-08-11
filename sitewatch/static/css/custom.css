@@ -1,0 +1,8 @@
+/* Status colors used consistently across map, badges, and lists.
+   Keep these in sync with status.py's return values: green/yellow/red,
+   plus admin_down (gray) and unreachable (blue) at the circuit level. */
+.status-green  { color: #198754; }
+.status-yellow { color: #ffc107; }
+.status-red    { color: #dc3545; }
+.status-gray   { color: #6c757d; }
+.status-blue   { color: #0d6efd; }

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<h4>Settings</h4>
+<form method="post" class="col-md-6 mb-5">
+  <div class="mb-3"><label class="form-label">Polling interval (minutes)</label>
+    <input class="form-control" name="polling_interval_minutes" value="{{ values.polling_interval_minutes }}"></div>
+  <div class="mb-3"><label class="form-label">Down threshold (consecutive failed polls)</label>
+    <input class="form-control" name="down_threshold_count" value="{{ values.down_threshold_count }}"></div>
+  <div class="mb-3"><label class="form-label">Max mute duration (minutes)</label>
+    <input class="form-control" name="mute_max_minutes" value="{{ values.mute_max_minutes }}"></div>
+  <div class="mb-3"><label class="form-label">Google Chat webhook URL</label>
+    <input class="form-control" name="google_chat_webhook_url" value="{{ values.google_chat_webhook_url }}"></div>
+  <div class="mb-3"><label class="form-label">Status history retention (days)</label>
+    <input class="form-control" name="status_history_retention_days" value="{{ values.status_history_retention_days }}"></div>
+  <button class="btn btn-primary">Save</button>
+</form>
+
+<h5>Circuit roles</h5>
+<table class="table table-sm col-md-6">
+  <thead><tr><th>Name</th><th>Tier</th></tr></thead>
+  <tbody>
+    {% for r in roles %}
+    <tr><form method="post" action="{{ url_for('settings.update_role', role_id=r.id) }}">
+      <td>{{ r.name }}</td>
+      <td>
+        <select class="form-select form-select-sm" name="tier" onchange="this.form.submit()">
+          <option value="critical" {{ 'selected' if r.tier=='critical' }}>critical</option>
+          <option value="auxiliary" {{ 'selected' if r.tier=='auxiliary' }}>auxiliary</option>
+        </select>
+      </td>
+    </form></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<form method="post" action="{{ url_for('settings.add_role') }}" class="d-flex gap-2 col-md-6 mb-5">
+  <input class="form-control" name="name" placeholder="Role name" required>
+  <select class="form-select" name="tier"><option value="critical">critical</option><option value="auxiliary">auxiliary</option></select>
+  <button class="btn btn-outline-primary">Add role</button>
+</form>
+
+<h5>NetBox</h5>
+<form method="post" action="{{ url_for('settings.netbox_sync') }}">
+  <button class="btn btn-outline-primary">Sync now</button>
+</form>
+{% endblock %}

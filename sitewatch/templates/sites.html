@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<a class="btn btn-primary mb-3" href="{{ url_for('sites.add_site') }}">Add site</a>
+<table class="table">
+  <thead><tr><th>Name</th><th>Status</th><th>Source</th></tr></thead>
+  <tbody>
+    {% for s in sites %}
+    <tr>
+      <td><a href="{{ url_for('sites.site_detail', site_id=s.id) }}">{{ s.name }}</a></td>
+      <td><span class="badge bg-{{ 'success' if statuses[s.id]=='green' else ('warning' if statuses[s.id]=='yellow' else 'danger') }}">{{ statuses[s.id] }}</span></td>
+      <td>{{ s.source }}{% if s.out_of_sync %} <span class="badge bg-secondary">out of sync</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

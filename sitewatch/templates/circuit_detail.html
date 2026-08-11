@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h4>{{ circuit.name }} <span class="badge bg-secondary">{{ circuit.current_state }}</span></h4>
+<p>Role: {{ circuit.role.name }} ({{ circuit.role.tier }}) | Type: {{ 'bundle' if circuit.is_bundle else 'point-to-point' }}</p>
+
+{% if circuit.is_bundle %}
+<h5>Members</h5>
+<ul class="list-group mb-3">
+  {% for c in circuit.children %}
+  <li class="list-group-item"><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a>
+      <span class="badge bg-secondary">{{ c.current_state }}</span></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>{{ circuit.interface_a.device.hostname }}:{{ circuit.interface_a.if_descr }} &harr;
+   {{ circuit.interface_b.device.hostname }}:{{ circuit.interface_b.if_descr }}</p>
+{% endif %}
+
+<h5>Alerting</h5>
+{% if is_muted %}
+<form method="post" action="{{ url_for('circuits.unmute_circuit', circuit_id=circuit.id) }}">
+  <button class="btn btn-outline-secondary btn-sm">Unmute</button>
+</form>
+{% else %}
+<form method="post" action="{{ url_for('circuits.mute_circuit', circuit_id=circuit.id) }}" class="d-flex gap-2">
+  <input class="form-control form-control-sm" style="width:100px" type="number" name="minutes" value="15" min="1" max="60">
+  <button class="btn btn-outline-secondary btn-sm">Mute (max 60 min)</button>
+</form>
+{% endif %}
+{% endblock %}

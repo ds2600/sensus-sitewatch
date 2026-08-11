@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="map" style="height: 500px;" class="mb-4 rounded border"></div>
+
+<h5>Currently down</h5>
+<table class="table table-sm">
+  <thead><tr><th>Circuit</th><th>Down since</th></tr></thead>
+  <tbody>
+    {% for h in down_now %}
+    <tr><td><a href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
+        <td>{{ h.started_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+    {% else %}
+    <tr><td colspan="2" class="text-muted">Nothing down.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h5>Recently cleared</h5>
+<table class="table table-sm">
+  <thead><tr><th>Circuit</th><th>Cleared at</th></tr></thead>
+  <tbody>
+    {% for h in recently_cleared %}
+    <tr><td>{{ h.circuit.name }}</td><td>{{ h.cleared_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+    {% else %}
+    <tr><td colspan="2" class="text-muted">Nothing recently cleared.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+{% endblock %}
