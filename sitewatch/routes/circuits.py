@@ -38,9 +38,28 @@ def add_circuit():
                             .outerjoin(Circuit, (Circuit.interface_a_id == Interface.id) |
                                        (Circuit.interface_b_id == Interface.id))
                             .filter(Circuit.id.is_(None)).all())
+
+    # Grouped by device so the form can offer "pick a device, then pick one
+    # of its interfaces" instead of one flat list of every unmapped
+    # interface on every device.
+    devices_by_id = {}
+    interfaces_by_device = {}
+    for i in unmapped_interfaces:
+        devices_by_id[i.device_id] = i.device
+        label = i.if_descr or f"ifIndex {i.if_index}"
+        if i.if_alias:
+            label += f" — {i.if_alias}"
+        interfaces_by_device.setdefault(str(i.device_id), []).append({"id": i.id, "label": label})
+    for ifaces in interfaces_by_device.values():
+        ifaces.sort(key=lambda x: x["label"])
+    devices_for_form = sorted(
+        ({"id": d.id, "label": f"{d.hostname} ({d.site.name})"} for d in devices_by_id.values()),
+        key=lambda x: x["label"],
+    )
+
     return render_template(
         "circuit_form.html", roles=CircuitRole.query.all(),
-        interfaces=unmapped_interfaces,
+        devices_for_form=devices_for_form, interfaces_by_device=interfaces_by_device,
         bundles=Circuit.query.filter_by(interface_a_id=None, interface_b_id=None).all(),
     )
 
@@ -77,7 +96,7 @@ def edit_circuit(circuit_id):
     bundles = [b for b in Circuit.query.filter_by(interface_a_id=None, interface_b_id=None).all()
                if b.id != circuit.id]
     return render_template("circuit_form.html", circuit=circuit, roles=CircuitRole.query.all(),
-                            interfaces=[], bundles=bundles)
+                            bundles=bundles)
 
 
 @circuits_bp.route("/<int:circuit_id>/delete", methods=["POST"])

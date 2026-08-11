@@ -21,12 +21,39 @@
     <label class="form-check-label" for="is_bundle">This is a bundle (no interfaces of its own)</label>
   </div>
   <div id="leaf-fields">
-    <div class="mb-3"><label class="form-label">Interface A</label>
-      <select class="form-select" name="interface_a_id">{% for i in interfaces %}<option value="{{ i.id }}">{{ i.device.hostname }} — {{ i.if_descr }}</option>{% endfor %}</select>
+    <datalist id="devices-datalist">
+      {% for d in devices_for_form %}<option value="{{ d.label }}">{% endfor %}
+    </datalist>
+
+    <div class="row">
+      <div class="col-6">
+        <div class="mb-3"><label class="form-label">Interface A — device</label>
+          <input class="form-control" list="devices-datalist" id="device_a_search"
+                 placeholder="Search device…" autocomplete="off">
+        </div>
+        <div class="mb-3"><label class="form-label">Interface A — interface</label>
+          <input class="form-control" list="interfaces_a_datalist" id="interface_a_search"
+                 placeholder="Select a device first…" autocomplete="off" disabled>
+          <datalist id="interfaces_a_datalist"></datalist>
+          <input type="hidden" name="interface_a_id" id="interface_a_id">
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="mb-3"><label class="form-label">Interface B — device</label>
+          <input class="form-control" list="devices-datalist" id="device_b_search"
+                 placeholder="Search device…" autocomplete="off">
+        </div>
+        <div class="mb-3"><label class="form-label">Interface B — interface</label>
+          <input class="form-control" list="interfaces_b_datalist" id="interface_b_search"
+                 placeholder="Select a device first…" autocomplete="off" disabled>
+          <datalist id="interfaces_b_datalist"></datalist>
+          <input type="hidden" name="interface_b_id" id="interface_b_id">
+        </div>
+      </div>
     </div>
-    <div class="mb-3"><label class="form-label">Interface B</label>
-      <select class="form-select" name="interface_b_id">{% for i in interfaces %}<option value="{{ i.id }}">{{ i.device.hostname }} — {{ i.if_descr }}</option>{% endfor %}</select>
-    </div>
+
+    <script id="devices-data" type="application/json">{{ devices_for_form | tojson }}</script>
+    <script id="interfaces-by-device-data" type="application/json">{{ interfaces_by_device | tojson }}</script>
   </div>
   {% else %}
   <p class="text-muted small">
@@ -43,4 +70,10 @@
   </div>
   <button class="btn btn-primary">Save</button>
 </form>
+{% endblock %}
+
+{% block scripts %}
+{% if not circuit %}
+<script src="{{ url_for('static', filename='js/circuit_form.js') }}"></script>
+{% endif %}
 {% endblock %}

@@ -216,10 +216,16 @@ class Circuit(db.Model):
 
     @property
     def site_a(self):
+        if self.is_bundle:
+            # A bundle has no interfaces of its own — borrow the first
+            # member's endpoint, same idea as is_intra_site's recursion.
+            return next((c.site_a for c in self.children if c.site_a), None)
         return self.interface_a.device.site if self.interface_a else None
 
     @property
     def site_b(self):
+        if self.is_bundle:
+            return next((c.site_b for c in self.children if c.site_b), None)
         return self.interface_b.device.site if self.interface_b else None
 
     @property
