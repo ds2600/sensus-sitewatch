@@ -208,6 +208,10 @@ Retention: configurable in Settings, no default assumed yet — set based on how
 - Encryption key: `.env` — back this up separately from the database, or encrypted credentials become unrecoverable
 - Back up by copying the `.db` file. Stop the app first, or accept a small risk of an in-flight write being mid-transaction (SQLite handles this reasonably well, but a clean stop is safer)
 
+**JSON export/import** (Settings → Backup & restore) is a lighter-weight alternative to copying the `.db` file — useful for moving config between environments, or a quick config-only snapshot. Export downloads a JSON file with sites, devices, interfaces, circuits, circuit roles, and settings. It does **not** include device credentials (SNMP community/keys, SSH password) — those never leave `crypto.py` in plaintext, so every device needs its credentials re-entered after an import. It also does not include user accounts or historical data (status history, utilization rollups) — those regenerate or stay as-is.
+
+Import is a full replace: it wipes existing sites/devices/interfaces/circuits/roles/settings and reloads from the file. This can't be undone — export a fresh backup first if you want a way back. User accounts are left untouched so you don't lock yourself out.
+
 ---
 
 ## 14. Testing without real devices
@@ -253,7 +257,143 @@ the database to include a tag like `[sim:down]`, `[sim:admin_down]`,
 `[sim:near_capacity]`, or `[sim:flapping]`. `sitewatch/simulator.py` lists
 the full set.
 
-## 15. Troubleshooting
+## 15. Production deployment
+
+Sections 1–3 cover running the app in the foreground with Flask's built-in
+dev server — fine for evaluating or developing, not for leaving up. This
+section covers running it as a persistent service with a real WSGI server
+behind TLS. Example config files referenced below live in `deploy/`.
+
+### 15.1 Install gunicorn
+
+Already pinned in `requirements.txt` — `pip install -r requirements.txt`
+picks it up. No separate step needed if you've already run section 2.
+
+### 15.2 The poller and worker count — read this before setting `--workers`
+
+`SITEWATCH_RUN_POLLER=1` starts the APScheduler poll loop inside the app
+process, once, at startup (`sitewatch/poller.py`). Gunicorn's `--workers N`
+forks N independent copies of the app — each one runs its own poller loop.
+With `--workers` > 1 every device gets polled N times per interval and
+every down-alert fires N times to Google Chat.
+
+There's no cross-process lock or leader-election to prevent this, so the
+supported production setup is **`--workers 1`**, using `--threads` instead
+for request concurrency. For an internal NMS at typical staff-facing
+traffic levels, one worker with a handful of threads has no trouble
+serving the UI and API concurrently — the poller loop itself doesn't block
+request handling since it runs in Flask's app context, not inside a
+request. If you outgrow this, the poller needs to be split into its own
+process (a separate entrypoint that only calls `poll_all_devices()`,
+scheduled independently of the web workers) — not implemented today.
+
+### 15.3 systemd service
+
+```bash
+sudo useradd --system --home /opt/sitewatch --shell /usr/sbin/nologin sitewatch
+sudo mkdir -p /opt/sitewatch
+# copy the project into /opt/sitewatch, or clone it there
+cd /opt/sitewatch
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env && nano .env      # fill in SECRET_KEY, ENCRYPTION_KEY, ADMIN_PASSWORD
+flask --app app init-db
+deactivate
+sudo chown -R sitewatch:sitewatch /opt/sitewatch
+sudo chmod 600 /opt/sitewatch/.env
+
+sudo cp deploy/sitewatch.service.example /etc/systemd/system/sitewatch.service
+sudo nano /etc/systemd/system/sitewatch.service   # confirm User/Group/WorkingDirectory match your install
+sudo systemctl daemon-reload
+sudo systemctl enable --now sitewatch
+sudo systemctl status sitewatch
+journalctl -u sitewatch -f                          # tail logs (access + error logs both go here)
+```
+
+`Restart=on-failure` in the unit means a crashed process comes back
+automatically; it also means the service survives reboots via `enable`.
+
+### 15.4 Reverse proxy + TLS
+
+Gunicorn binds to `127.0.0.1:8000` only — nothing external talks to it
+directly. Put nginx (or another reverse proxy) in front for TLS
+termination and to be the thing actually exposed on the network. This
+matters even for LAN-only access: without TLS, the login form posts the
+admin password in plaintext.
+
+```bash
+sudo apt install nginx
+sudo mkdir -p /etc/ssl/sitewatch
+sudo openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+  -keyout /etc/ssl/sitewatch/privkey.pem \
+  -out /etc/ssl/sitewatch/fullchain.pem \
+  -subj "/CN=sitewatch.internal"        # self-signed — fine for LAN-only; use a real CA cert if you have one
+
+sudo cp deploy/nginx-sitewatch.conf.example /etc/nginx/sites-available/sitewatch
+sudo nano /etc/nginx/sites-available/sitewatch   # set server_name to your host's LAN name/IP
+sudo ln -s /etc/nginx/sites-available/sitewatch /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Browsers will warn on the self-signed cert (expected — there's no CA
+vouching for it). Click through, or replace it with a cert from an
+internal CA if your org has one.
+
+### 15.5 Firewall
+
+Only the reverse proxy needs to be reachable from the LAN — gunicorn's
+`127.0.0.1:8000` already isn't. On the host:
+
+```bash
+sudo ufw allow 443/tcp
+sudo ufw allow 80/tcp     # for the redirect to https
+```
+
+Don't open 8000 — that would let clients bypass TLS and talk to gunicorn directly.
+
+### 15.6 Running this on WSL2 instead of a dedicated Linux host
+
+If you're running the above inside WSL2 rather than a standalone VM
+(e.g. as an interim setup before moving to real server), two WSL-specific
+things apply on top of everything in 15.1–15.5:
+
+- **systemd**: needs to be enabled explicitly — add `[boot] systemd=true`
+  to `/etc/wsl.conf` inside the WSL distro, then from PowerShell run
+  `wsl --shutdown` and reopen your WSL terminal. Requires a reasonably
+  recent WSL version; check with `wsl --version` from PowerShell if
+  `systemctl` isn't found after this.
+- **LAN exposure**: WSL2's default networking NATs the distro behind the
+  Windows host, so other LAN devices can't reach it directly even once
+  nginx is listening. Two options, from PowerShell (admin):
+  - **Mirrored networking** (simpler, needs Windows 11 22H2+ and a recent
+    WSL): add `networkingMode=mirrored` under `[wsl2]` in `%UserProfile%\.wslconfig`,
+    then `wsl --shutdown` and reopen. WSL then shares the host's network
+    interface directly — no proxying needed, just a Windows Firewall rule
+    for 443/80 if one doesn't already allow it.
+  - **Port proxy** (works on older WSL): forward the port from the
+    Windows host to WSL2's (changes-on-restart) IP:
+    ```powershell
+    wsl hostname -I                                            # get current WSL2 IP
+    netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=443 connectaddress=<WSL2-IP> connectport=443
+    netsh advfirewall firewall add rule name="SiteWatch HTTPS" dir=in action=allow protocol=TCP localport=443
+    ```
+    The WSL2 IP changes on every restart, so this `portproxy` command
+    needs re-running each time unless scripted (e.g. a scheduled task
+    that runs it at Windows startup) — mirrored mode avoids this entirely
+    if your Windows version supports it.
+
+### 15.7 Before calling it done
+
+- [ ] `.env` has real `SECRET_KEY`/`ENCRYPTION_KEY`/`ADMIN_PASSWORD` values (not the ones from local dev), and is `chmod 600`
+- [ ] Logged in once and confirmed the admin password works through the reverse proxy over HTTPS
+- [ ] `journalctl -u sitewatch -f` shows poll cycles running (confirms `SITEWATCH_RUN_POLLER=1` took effect) — see section 16 if not
+- [ ] `--workers 1` in the systemd unit (see 15.2 — don't "fix" this without splitting out the poller first)
+- [ ] `instance/sitewatch.db` and `.env` are both included in whatever backup process you use (section 13); consider also keeping periodic JSON exports (Settings → Backup & restore) since those don't require stopping the service
+
+---
+
+## 16. Troubleshooting
 
 **Device shows blue immediately after adding it**: check SNMP reachability manually first:
 ```bash

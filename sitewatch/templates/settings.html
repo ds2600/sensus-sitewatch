@@ -47,7 +47,26 @@
 </form>
 
 <h5>NetBox</h5>
-<form method="post" action="{{ url_for('settings.netbox_sync') }}">
+<form method="post" action="{{ url_for('settings.netbox_sync') }}" class="mb-5">
   <button class="btn btn-outline-primary">Sync now</button>
 </form>
+
+<h5>Backup &amp; restore</h5>
+<div class="alert alert-warning col-md-6">
+  A backup covers sites, devices, interfaces, circuits, circuit roles, and
+  settings — it does <strong>not</strong> include device credentials (SNMP
+  community/keys, SSH password). After importing a backup, re-enter
+  credentials on each device from the
+  <a href="{{ url_for('devices.list_devices') }}">Devices</a> page before
+  polling will work again.
+</div>
+<div class="col-md-6 d-flex gap-2 align-items-start">
+  <a class="btn btn-outline-primary" href="{{ url_for('settings.export_backup') }}">Export backup (.json)</a>
+  <form method="post" action="{{ url_for('settings.import_backup') }}" enctype="multipart/form-data"
+        class="d-flex gap-2"
+        onsubmit="return confirm('Importing replaces ALL sites, devices, interfaces, circuits, roles, and settings with the contents of this file. This cannot be undone. Continue?');">
+    <input type="file" name="backup_file" accept="application/json" class="form-control" required>
+    <button class="btn btn-outline-danger text-nowrap">Import backup</button>
+  </form>
+</div>
 {% endblock %}

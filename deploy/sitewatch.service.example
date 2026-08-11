@@ -1,0 +1,31 @@
+# Copy to /etc/systemd/system/sitewatch.service, then edit User/Group and
+# WorkingDirectory for your install path (see README section 16).
+#
+# --workers MUST stay at 1. The background poller (APScheduler) starts once
+# per worker process on app startup — a second worker means a second poller
+# loop, i.e. every device gets polled twice per interval and every down
+# alert fires twice. --threads gives you request concurrency without a
+# second poller.
+
+[Unit]
+Description=Sensus SiteWatch (Flask NMS)
+After=network.target
+
+[Service]
+Type=simple
+User=sitewatch
+Group=sitewatch
+WorkingDirectory=/opt/sitewatch
+Environment=SITEWATCH_RUN_POLLER=1
+# Uncomment only when testing without real device access (see README section 14):
+# Environment=SITEWATCH_SIMULATE=1
+ExecStart=/opt/sitewatch/venv/bin/gunicorn \
+    --workers 1 --threads 4 \
+    --bind 127.0.0.1:8000 \
+    --access-logfile - --error-logfile - \
+    app:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

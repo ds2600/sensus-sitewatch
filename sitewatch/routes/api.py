@@ -32,7 +32,7 @@ def map_data():
 @api_bp.route("/alerts")
 @login_required
 def alerts():
-    down = CircuitStatusHistory.query.filter_by(cleared_at=None).all()
+    down = CircuitStatusHistory.query.join(Circuit).filter(CircuitStatusHistory.cleared_at.is_(None)).all()
     unmuted = [h for h in down if not AlertMute.is_muted(h.circuit_id)]
     return jsonify({
         "count": len(unmuted),

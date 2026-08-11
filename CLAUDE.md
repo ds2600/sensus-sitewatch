@@ -37,6 +37,9 @@ site/circuit status on a Leaflet map. Full spec and setup steps: README.md.
 8. `sitewatch/integrations/` — NetBox pull-sync and Google Chat webhook
    delivery. Both are intentionally isolated here so they can be swapped
    or extended without touching poller/status logic.
+9. `sitewatch/backup.py` — JSON export/import (Settings → Backup & restore).
+   Export never includes device credentials — see the module docstring.
+   Import is a full replace of config tables; see README.md section 13.
 
 ## Status model — the thing most likely to need care
 
@@ -61,7 +64,9 @@ stored, from `compute_site_status()`.
 - Credentials (SNMP community/keys, SSH password) are never stored or
   passed around in plaintext outside `crypto.py`. Access them via the
   property accessors on `Device` (e.g. `device.snmp_community`), never the
-  `_enc` columns directly.
+  `_enc` columns directly. This is also why `backup.py` excludes
+  credentials entirely rather than exporting ciphertext or plaintext —
+  keep it that way if the export format changes.
 - Server-rendered Jinja + Bootstrap 5 (CDN, no build step) + vanilla JS for
   the map (Leaflet) and alert polling. No frontend build tooling on
   purpose — keep it that way unless there's a real reason to add one.
@@ -75,7 +80,14 @@ stored, from `compute_site_status()`.
   wired into a circuit, a bundle circuit blocks if it still has members,
   a role blocks if any circuit still references it. Follow this pattern
   for any new delete route — SQLite FK enforcement isn't turned on here,
-  so an unguarded delete leaves dangling foreign keys silently.
+  so an unguarded delete leaves dangling foreign keys silently. This is
+  for rows that *block* deletion of something else; for rows that are
+  *owned by* the thing being deleted (e.g. `CircuitStatusHistory`,
+  `AlertMute` belonging to a `Circuit`), use an ORM-level
+  `cascade="all, delete-orphan"` relationship instead (see `Circuit`'s
+  `status_history`/`alert_mute` relationships, or `Device.interfaces`) so
+  deleting the parent actually cleans up its children rather than leaving
+  them dangling.
 
 ## Known gaps / not yet built
 
@@ -97,6 +109,13 @@ stored, from `compute_site_status()`.
 - Utilization display (device detail page) is a raw computed percentage
   with no smoothing — a single noisy poll can show a spike that a rollup
   average would have hidden. Cosmetic until rollups exist.
+- The poller (`start_poller()`) runs in-process with the web app, started
+  once per process on `SITEWATCH_RUN_POLLER=1`. There's no cross-process
+  coordination, so production must run a single worker process (see
+  README.md section 15.2) — scaling web workers means scaling poll
+  cycles and duplicate alerts right along with them. Splitting the poller
+  into its own process is the real fix if this app ever needs more than
+  one worker; not implemented.
 
 ## Running locally
 
@@ -112,3 +131,7 @@ SITEWATCH_RUN_POLLER=1 flask --app app run --host=0.0.0.0 --port=5000
 
 `SITEWATCH_RUN_POLLER=1` starts the background poller. Omit it when just
 poking at routes/templates without wanting live SNMP polling running.
+
+For running this as a persistent service instead (gunicorn + systemd +
+reverse proxy), see README.md section 15 and the example configs in
+`deploy/`.

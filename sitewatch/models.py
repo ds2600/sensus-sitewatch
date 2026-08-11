@@ -205,6 +205,10 @@ class Circuit(db.Model):
     interface_a = db.relationship("Interface", foreign_keys=[interface_a_id])
     interface_b = db.relationship("Interface", foreign_keys=[interface_b_id])
     children = db.relationship("Circuit", backref=db.backref("parent", remote_side=[id]))
+    status_history = db.relationship("CircuitStatusHistory", backref="circuit",
+                                      cascade="all, delete-orphan")
+    alert_mute = db.relationship("AlertMute", backref="circuit",
+                                  cascade="all, delete-orphan", uselist=False)
 
     @property
     def is_bundle(self):
@@ -247,8 +251,6 @@ class CircuitStatusHistory(db.Model):
     state = db.Column(db.String(20), nullable=False)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     cleared_at = db.Column(db.DateTime, nullable=True)
-
-    circuit = db.relationship("Circuit")
 
 
 class UtilizationRollup(db.Model):

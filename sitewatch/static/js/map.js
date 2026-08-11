@@ -5,13 +5,22 @@ const CIRCUIT_COLOR = { up: "#198754", degraded: "#ffc107", down: "#dc3545",
                          admin_down: "#6c757d", unreachable: "#0d6efd" };
 
 async function loadMap() {
-  const map = L.map("map").setView([39.8, -98.6], 4); // CONUS default, adjust as needed
+  const map = L.map("map").setView([39.8, -98.6], 4); // CONUS fallback until sites load (or if there are none)
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
   const res = await fetch("/api/map");
   const data = await res.json();
+
+  // Frame the view around however spread out the sites actually are — tight
+  // clusters (a handful of sites in one state) zoom in, wide spreads (coast
+  // to coast) zoom out. maxZoom caps how far a tight cluster (including a
+  // single site) zooms in, so there's still room to see what's around it.
+  if (data.sites.length > 0) {
+    const bounds = L.latLngBounds(data.sites.map((s) => [s.lat, s.lon]));
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 11 });
+  }
 
   // Lines first, markers last — Leaflet stacks later-added vector layers on
   // top, and site marker/line endpoints often share exact coordinates. If
