@@ -11,7 +11,8 @@ import logging
 
 from sitewatch.extensions import db, scheduler
 from sitewatch.models import Device, Interface, Circuit, CircuitStatusHistory, Setting, Site
-from sitewatch.snmp import check_reachable, poll_interface_counters, SnmpError
+from sitewatch import telemetry
+from sitewatch.snmp import SnmpError
 from sitewatch.status import recompute_bundle_state, rollup_degree_status
 from sitewatch.integrations.webhook_payload import send_down_alert
 
@@ -26,13 +27,13 @@ def poll_all_devices():
 
 
 def _poll_device(device):
-    device.reachable = check_reachable(device)
+    device.reachable = telemetry.check_reachable(device)
     if not device.reachable:
         return  # interfaces stay at last-known values; circuit state handled via device.reachable check below
 
     for iface in device.interfaces:
         try:
-            data = poll_interface_counters(device, iface.if_index)
+            data = telemetry.poll_interface_counters(device, iface)
         except SnmpError:
             continue  # transient GET failure — leave stale, next poll will retry
 

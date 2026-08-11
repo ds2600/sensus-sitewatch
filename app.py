@@ -31,5 +31,16 @@ def init_db():
     click.echo(f"Database initialized. Admin user: {admin_user}")
 
 
+@app.cli.command("seed-demo")
+@with_appcontext
+def seed_demo_command():
+    """Populate the DB with a small simulated topology (no real devices
+    needed). Run the server with SITEWATCH_SIMULATE=1 afterward so the
+    poller reads back simulated telemetry instead of real SNMP."""
+    from sitewatch.seed_demo import run
+    run()
+    click.echo("Demo data seeded. Start the server with SITEWATCH_SIMULATE=1 to see it poll.")
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,6 +1,6 @@
 // Renders the site/circuit map on the dashboard. Colors follow status.py's
 // green/yellow/red for sites, plus per-circuit state for lines.
-const STATUS_COLOR = { green: "#198754", yellow: "#ffc107", red: "#dc3545" };
+const STATUS_COLOR = { green: "#198754", yellow: "#ffc107", red: "#dc3545", blue: "#0d6efd" };
 const CIRCUIT_COLOR = { up: "#198754", degraded: "#ffc107", down: "#dc3545",
                          admin_down: "#6c757d", unreachable: "#0d6efd" };
 

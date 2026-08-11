@@ -1,10 +1,10 @@
-from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
 from sitewatch.extensions import db
-from sitewatch.models import Device, Site, Interface, VENDORS, SNMP_VERSIONS
-from sitewatch.snmp import walk_interfaces, SnmpError
+from sitewatch.models import Device, Site, VENDORS, SNMP_VERSIONS
+from sitewatch.snmp import SnmpError
+from sitewatch.discovery import perform_walk
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
 
@@ -51,22 +51,11 @@ def device_detail(device_id):
 def walk_device(device_id):
     device = Device.query.get_or_404(device_id)
     try:
-        discovered = walk_interfaces(device)
+        count = perform_walk(device)
     except SnmpError as e:
         flash(f"Walk failed: {e}")
         return redirect(url_for("devices.device_detail", device_id=device_id))
 
-    existing = {i.if_index: i for i in device.interfaces}
-    for idx, data in discovered.items():
-        if idx in existing:
-            iface = existing[idx]
-            iface.if_descr = data["if_descr"]
-            iface.if_alias = data["if_alias"]
-            iface.if_speed_bps = data["if_speed_bps"]
-        else:
-            db.session.add(Interface(device_id=device.id, if_index=idx, **data))
-
-    device.last_walked_at = datetime.utcnow()
     db.session.commit()
-    flash(f"Walk complete: {len(discovered)} interfaces found.")
+    flash(f"Walk complete: {count} interfaces found.")
     return redirect(url_for("devices.device_detail", device_id=device_id))

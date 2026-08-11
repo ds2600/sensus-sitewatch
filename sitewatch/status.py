@@ -38,8 +38,14 @@ def recompute_bundle_state(bundle_circuit):
 
 
 def compute_site_status(site):
-    """Returns 'green' | 'yellow' | 'red'. Root circuits only (no parent) —
+    """Returns 'green' | 'yellow' | 'red' | 'blue'. Blue means every device
+    at the site is failing SNMP reachability — distinct from a confirmed
+    down circuit, since the site itself can't be assessed, not just one
+    of its links. Root circuits only count toward red/yellow (no parent) —
     bundle members don't get counted twice against the site."""
+    if site.devices and all(not d.reachable for d in site.devices):
+        return "blue"
+
     root_circuits = [c for c in Circuit.query.filter_by(parent_circuit_id=None).all()
                       if _touches_site(c, site.id)]
 

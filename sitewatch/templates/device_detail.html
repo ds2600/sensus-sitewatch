@@ -12,11 +12,14 @@
 </form>
 
 <table class="table table-sm">
-  <thead><tr><th>Index</th><th>Descr</th><th>Alias</th><th>Speed</th><th>Oper</th><th>Admin</th></tr></thead>
+  <thead><tr><th>Index</th><th>Descr</th><th>Alias</th><th>Speed</th><th>Oper</th><th>Admin</th><th>In</th><th>Out</th><th>Util</th></tr></thead>
   <tbody>
     {% for i in device.interfaces %}
     <tr><td>{{ i.if_index }}</td><td>{{ i.if_descr }}</td><td>{{ i.if_alias }}</td>
-        <td>{{ i.if_speed_bps }}</td><td>{{ i.oper_status }}</td><td>{{ i.admin_status }}</td></tr>
+        <td>{{ i.if_speed_bps }}</td><td>{{ i.oper_status }}</td><td>{{ i.admin_status }}</td>
+        <td>{{ '%.1f Mbps'|format(i.last_in_bps / 1000000) if i.last_in_bps else '-' }}</td>
+        <td>{{ '%.1f Mbps'|format(i.last_out_bps / 1000000) if i.last_out_bps else '-' }}</td>
+        <td>{{ '%.0f%%'|format(i.last_in_bps / i.if_speed_bps * 100) if i.last_in_bps and i.if_speed_bps else '-' }}</td></tr>
     {% endfor %}
   </tbody>
 </table>

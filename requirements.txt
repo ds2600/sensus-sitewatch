@@ -1,9 +1,11 @@
+setuptools<81  # napalm imports pkg_resources, which setuptools 81+ removed
 Flask==3.0.3
 Flask-Login==0.6.3
 Flask-SQLAlchemy==3.1.1
 APScheduler==3.10.4
 pysnmp==4.4.12
 pyasn1==0.4.8
+pyasyncore==1.0.2  # restores the 'asyncore' module pysnmp 4.4 needs; stdlib removed it in Python 3.12
 napalm==5.0.0
 pynetbox==7.3.3
 cryptography==42.0.5
