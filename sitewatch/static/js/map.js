@@ -13,13 +13,10 @@ async function loadMap() {
   const res = await fetch("/api/map");
   const data = await res.json();
 
-  data.sites.forEach((s) => {
-    L.circleMarker([s.lat, s.lon], {
-      radius: 10, color: STATUS_COLOR[s.status], fillColor: STATUS_COLOR[s.status], fillOpacity: 0.9,
-    }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a>`).addTo(map);
-  });
-
-  // Parallel-offset lines sharing the same site pair so they don't overlap.
+  // Lines first, markers last — Leaflet stacks later-added vector layers on
+  // top, and site marker/line endpoints often share exact coordinates. If
+  // markers went first, clicking a site would hit the line instead and show
+  // the circuit's popup rather than the site's.
   const byPair = {};
   data.lines.forEach((l) => {
     const key = [l.site_a.lat + "," + l.site_a.lon, l.site_b.lat + "," + l.site_b.lon].sort().join("|");
@@ -35,6 +32,12 @@ async function loadMap() {
         { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 }
       ).bindPopup(`<a href="/circuits/${l.id}">${l.name}</a> (${l.role})`).addTo(map);
     });
+  });
+
+  data.sites.forEach((s) => {
+    L.circleMarker([s.lat, s.lon], {
+      radius: 10, color: STATUS_COLOR[s.status], fillColor: STATUS_COLOR[s.status], fillOpacity: 0.9,
+    }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a>`).addTo(map).bringToFront();
   });
 }
 

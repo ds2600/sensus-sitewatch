@@ -70,8 +70,13 @@ Run once for each key, paste results into `.env`.
 ```bash
 source venv/bin/activate
 flask --app app init-db      # creates SQLite schema, seeds admin user
-flask --app app run --host=0.0.0.0 --port=5000
+SITEWATCH_RUN_POLLER=1 flask --app app run --host=0.0.0.0 --port=5000
 ```
+
+`SITEWATCH_RUN_POLLER=1` starts the background poller. Without it the app
+runs but never polls anything — devices/circuits just sit at their default
+state forever. Omit it only if you deliberately want the UI up without
+live polling (e.g. browsing existing data).
 
 Access from Windows host browser: `http://localhost:5000`
 (WSL2 forwards localhost automatically — no extra config needed.)
@@ -216,8 +221,14 @@ source venv/bin/activate
 rm -f instance/sitewatch.db          # start clean if you already ran init-db
 flask --app app init-db
 SITEWATCH_SIMULATE=1 flask --app app seed-demo
-SITEWATCH_SIMULATE=1 flask --app app run --host=0.0.0.0 --port=5000
+SITEWATCH_SIMULATE=1 SITEWATCH_RUN_POLLER=1 flask --app app run --host=0.0.0.0 --port=5000
 ```
+
+`seed-demo` drives several poll cycles itself as part of seeding, so the
+map and dashboard show the correct states (down/degraded/unreachable/etc.)
+the instant you load the page — you don't have to wait on the scheduler.
+`SITEWATCH_RUN_POLLER=1` on the `run` command is still worth setting so
+things keep updating live afterward (e.g. to watch a mute expire).
 
 `seed-demo` builds 4 sites, 6 devices, and a handful of circuits scripted
 to hit every status color:
@@ -226,7 +237,7 @@ to hit every status color:
 |---|---|
 | Chicago DC / Denver DC: yellow | Core bundle between them is fully up (critical), but an auxiliary office link is down — demonstrates auxiliary failures cap at yellow, never red |
 | Austin DC: red | Single critical circuit to Chicago, down, no redundancy |
-| Phoenix DC: blue | Device tagged unreachable — demonstrates the whole-site-unreachable case |
+| Phoenix DC: blue, with a blue line to Denver | Device tagged unreachable — demonstrates both the whole-site-unreachable case and an unreachable circuit rendering on the map, not just an isolated site |
 | CHI-DEN-Office-Backup circuit: gray | Tagged admin-down — excluded from status math entirely |
 | One core bundle member: high but not alarming utilization | Demonstrates the utilization numbers on the device detail page without needing real traffic |
 

@@ -13,11 +13,20 @@ Scenarios scripted here (see simulator.py for what each tag does):
     excluded from status math entirely.
   - CHI-AUS-Core (critical, single degree): tagged down. Austin has only
     this one path out, so this demonstrates red.
+  - DEN-PHX-Core (critical, single degree): Phoenix's device is tagged
+    unreachable, so this circuit reads unreachable — demonstrates a real
+    line on the map going blue, not just an isolated site marker.
   - Phoenix device hostname tagged [sim:unreachable]: demonstrates blue,
-    both at the device and site level, once the poller runs.
+    both at the device and site level.
+
+Runs several real poll cycles at the end (see _drive_poll_cycles below) so
+the map/dashboard show correct states the moment you load them — you don't
+need SITEWATCH_RUN_POLLER=1 running for the demo data itself to look right,
+though you do need it if you want states to keep updating live afterward.
 """
+from datetime import timedelta
 from sitewatch.extensions import db
-from sitewatch.models import Site, Device, Circuit, CircuitRole, Interface
+from sitewatch.models import Site, Device, Circuit, CircuitRole, Interface, Setting
 from sitewatch.discovery import perform_walk
 
 
@@ -100,4 +109,35 @@ def run():
     db.session.add(Circuit(name="CHI-AUS-Core", role_id=core_role.id,
                             interface_a_id=aus_a.id, interface_b_id=_iface(aus_core, "GigabitEthernet0/0/1").id))
 
+    # Single critical degree to Phoenix. Phoenix's device is unreachable, so
+    # this circuit reads unreachable regardless of any tag on its interfaces
+    # — shown on the map as a blue line, not just a blue dot with nothing
+    # connecting to it.
+    db.session.add(Circuit(name="DEN-PHX-Core", role_id=core_role.id,
+                            interface_a_id=_iface(den_core, "GigabitEthernet0/0/3").id,
+                            interface_b_id=_iface(phx_core, "GigabitEthernet0/0/1").id))
+
     db.session.commit()
+    _drive_poll_cycles()
+
+
+def _drive_poll_cycles():
+    """Runs poll_all_devices() enough times to clear the down-threshold
+    debounce, so seeded scenarios show their real state immediately. Then
+    backdates interface counters by one polling interval and polls once
+    more, so utilization numbers reflect a real interval's worth of traffic
+    instead of the near-zero delta you'd get from calling the poller
+    several times in a tight loop with no real time elapsed between calls.
+    """
+    from sitewatch.poller import poll_all_devices  # imported here to avoid loading it for every seed_demo import
+
+    threshold = Setting.get_int("down_threshold_count")
+    for _ in range(threshold):
+        poll_all_devices()
+
+    interval_minutes = Setting.get_int("polling_interval_minutes")
+    for iface in Interface.query.all():
+        if iface.last_counter_at:
+            iface.last_counter_at -= timedelta(minutes=interval_minutes)
+    db.session.commit()
+    poll_all_devices()
