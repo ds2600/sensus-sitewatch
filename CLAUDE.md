@@ -69,6 +69,13 @@ stored, from `compute_site_status()`.
   environment variables — except NetBox URL/token and the crypto/secret
   keys, which stay in `.env` since they're deployment-level, not
   app-behavior-level.
+- Delete routes (sites, devices, circuits, roles) all guard against
+  orphaning data rather than relying on DB-level cascade: a site blocks
+  deletion if it still has devices, a device blocks if its interfaces are
+  wired into a circuit, a bundle circuit blocks if it still has members,
+  a role blocks if any circuit still references it. Follow this pattern
+  for any new delete route — SQLite FK enforcement isn't turned on here,
+  so an unguarded delete leaves dangling foreign keys silently.
 
 ## Known gaps / not yet built
 
