@@ -18,12 +18,23 @@ site/circuit status on a Leaflet map. Full spec and setup steps: README.md.
    coding goes through `rollup_degree_status()` and `compute_site_status()`.
 3. `sitewatch/poller.py` — the polling loop and the down-threshold debounce.
    Runs on APScheduler, one pass per `polling_interval_minutes` setting.
-4. `sitewatch/snmp.py` — pysnmp wrappers. Pinned to pysnmp 4.4.x hlapi
+4. `sitewatch/telemetry.py` — the only module poller.py and the walk route
+   call. Routes to `snmp.py` or `simulator.py` based on `SITEWATCH_SIMULATE`.
+   Don't call either backend directly from outside this file.
+5. `sitewatch/snmp.py` — pysnmp wrappers. Pinned to pysnmp 4.4.x hlapi
    (sync style). Upgrading pysnmp means rewriting this file for the async
-   v6.x API — nothing else depends on pysnmp's internals directly.
-5. `sitewatch/routes/` — one blueprint per resource (sites, devices,
+   v6.x API — nothing else depends on pysnmp's internals directly. Note:
+   pysnmp 4.4's transport needs the stdlib `asyncore` module, removed in
+   Python 3.12 — `pyasyncore` in requirements.txt backports it. Also note
+   `napalm` imports `pkg_resources`, which setuptools 81+ dropped — the
+   `setuptools<81` pin in requirements.txt exists solely for that.
+6. `sitewatch/simulator.py` — fake telemetry backend for testing without
+   device access. Reads scenario tags (`[sim:down]`, etc.) out of an
+   interface's alias field. `sitewatch/seed_demo.py` builds a demo
+   topology using it — see README.md section 14.
+7. `sitewatch/routes/` — one blueprint per resource (sites, devices,
    circuits, settings) plus `api.py` for the JSON the map/alerts JS consume.
-6. `sitewatch/integrations/` — NetBox pull-sync and Google Chat webhook
+8. `sitewatch/integrations/` — NetBox pull-sync and Google Chat webhook
    delivery. Both are intentionally isolated here so they can be swapped
    or extended without touching poller/status logic.
 
@@ -61,7 +72,8 @@ stored, from `compute_site_status()`.
 
 ## Known gaps / not yet built
 
-- No automated tests exist yet.
+- No automated test suite exists yet — verification so far has been manual
+  runs against simulate mode (see README section 14), not pytest or similar.
 - Utilization rollup (`UtilizationRollup` model exists) has no scheduled
   job writing to it yet — poller.py updates live `last_in_bps`/`last_out_bps`
   on `Interface` but doesn't roll those into hourly/daily aggregates.
@@ -72,6 +84,12 @@ stored, from `compute_site_status()`.
 - No automated migration tool (Alembic etc.) — schema changes currently
   mean editing `models.py` and re-running `flask init-db` against a fresh
   database, or hand-writing SQLite `ALTER TABLE` statements.
+- A site going fully unreachable (blue) doesn't fire a distinct alert —
+  only individual circuit down-transitions trigger `send_down_alert`.
+  Worth deciding whether that's acceptable or needs its own alert path.
+- Utilization display (device detail page) is a raw computed percentage
+  with no smoothing — a single noisy poll can show a spike that a rollup
+  average would have hidden. Cosmetic until rollups exist.
 
 ## Running locally
 

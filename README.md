@@ -205,7 +205,44 @@ Retention: configurable in Settings, no default assumed yet — set based on how
 
 ---
 
-## 14. Troubleshooting
+## 14. Testing without real devices
+
+If you can't reach real devices yet (ACLs, firewall, not deployed), run in
+simulate mode instead. This swaps SNMP calls for a fake backend that
+generates plausible telemetry — no network access needed.
+
+```bash
+source venv/bin/activate
+rm -f instance/sitewatch.db          # start clean if you already ran init-db
+flask --app app init-db
+SITEWATCH_SIMULATE=1 flask --app app seed-demo
+SITEWATCH_SIMULATE=1 flask --app app run --host=0.0.0.0 --port=5000
+```
+
+`seed-demo` builds 4 sites, 6 devices, and a handful of circuits scripted
+to hit every status color:
+
+| What you'll see | Why |
+|---|---|
+| Chicago DC / Denver DC: yellow | Core bundle between them is fully up (critical), but an auxiliary office link is down — demonstrates auxiliary failures cap at yellow, never red |
+| Austin DC: red | Single critical circuit to Chicago, down, no redundancy |
+| Phoenix DC: blue | Device tagged unreachable — demonstrates the whole-site-unreachable case |
+| CHI-DEN-Office-Backup circuit: gray | Tagged admin-down — excluded from status math entirely |
+| One core bundle member: high but not alarming utilization | Demonstrates the utilization numbers on the device detail page without needing real traffic |
+
+`SITEWATCH_SIMULATE=1` must be set for both `seed-demo` and `flask run` —
+it swaps every device's SNMP calls for synthetic data generated from tags
+in each interface's alias field (see `sitewatch/simulator.py`). Real
+devices added alongside demo ones will still fail to poll while simulate
+mode is on, since it's a global switch, not per-device — unset the
+variable and restart once you have real device access.
+
+To script your own scenarios: after a walk, edit an interface's alias in
+the database to include a tag like `[sim:down]`, `[sim:admin_down]`,
+`[sim:near_capacity]`, or `[sim:flapping]`. `sitewatch/simulator.py` lists
+the full set.
+
+## 15. Troubleshooting
 
 **Device shows blue immediately after adding it**: check SNMP reachability manually first:
 ```bash
