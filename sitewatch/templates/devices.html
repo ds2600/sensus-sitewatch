@@ -2,7 +2,7 @@
 {% block content %}
 <a class="btn btn-primary mb-3" href="{{ url_for('devices.add_device') }}">Add device</a>
 <table class="table">
-  <thead><tr><th>Hostname</th><th>Site</th><th>Vendor</th><th>Reachable</th></tr></thead>
+  <thead><tr><th>Hostname</th><th>Site</th><th>Vendor</th><th>Reachable</th><th></th></tr></thead>
   <tbody>
     {% for d in devices %}
     <tr>
@@ -10,6 +10,7 @@
       <td>{{ d.site.name }}</td>
       <td>{{ d.vendor }}</td>
       <td>{% if d.reachable %}<span class="badge bg-success">yes</span>{% else %}<span class="badge bg-primary">unreachable</span>{% endif %}</td>
+      <td><a href="{{ url_for('devices.edit_device', device_id=d.id) }}">Edit</a></td>
     </tr>
     {% endfor %}
   </tbody>

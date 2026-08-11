@@ -17,18 +17,26 @@
 
 <h5>Circuit roles</h5>
 <table class="table table-sm col-md-6">
-  <thead><tr><th>Name</th><th>Tier</th></tr></thead>
+  <thead><tr><th>Name</th><th>Tier</th><th></th></tr></thead>
   <tbody>
     {% for r in roles %}
-    <tr><form method="post" action="{{ url_for('settings.update_role', role_id=r.id) }}">
+    <tr>
       <td>{{ r.name }}</td>
       <td>
-        <select class="form-select form-select-sm" name="tier" onchange="this.form.submit()">
-          <option value="critical" {{ 'selected' if r.tier=='critical' }}>critical</option>
-          <option value="auxiliary" {{ 'selected' if r.tier=='auxiliary' }}>auxiliary</option>
-        </select>
+        <form method="post" action="{{ url_for('settings.update_role', role_id=r.id) }}">
+          <select class="form-select form-select-sm" name="tier" onchange="this.form.submit()">
+            <option value="critical" {{ 'selected' if r.tier=='critical' }}>critical</option>
+            <option value="auxiliary" {{ 'selected' if r.tier=='auxiliary' }}>auxiliary</option>
+          </select>
+        </form>
       </td>
-    </form></tr>
+      <td>
+        <form method="post" action="{{ url_for('settings.delete_role', role_id=r.id) }}"
+              onsubmit="return confirm('Delete role {{ r.name }}?');">
+          <button class="btn btn-outline-danger btn-sm">Delete</button>
+        </form>
+      </td>
+    </tr>
     {% endfor %}
   </tbody>
 </table>

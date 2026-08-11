@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
 from sitewatch.extensions import db
@@ -51,6 +51,45 @@ def circuit_detail(circuit_id):
     circuit = Circuit.query.get_or_404(circuit_id)
     is_muted = AlertMute.is_muted(circuit_id)
     return render_template("circuit_detail.html", circuit=circuit, is_muted=is_muted)
+
+
+@circuits_bp.route("/<int:circuit_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_circuit(circuit_id):
+    """Name, role, parent, and capacity are editable. Endpoints (which
+    interfaces this circuit connects) are not — delete and recreate if
+    those need to change, so history isn't attached to a circuit that's
+    quietly become a different link."""
+    circuit = Circuit.query.get_or_404(circuit_id)
+    if request.method == "POST":
+        f = request.form
+        circuit.name = f["name"]
+        circuit.role_id = int(f["role_id"])
+        new_parent = int(f["parent_circuit_id"]) if f.get("parent_circuit_id") else None
+        if new_parent == circuit.id:
+            flash("A circuit can't be its own parent.")
+            return redirect(url_for("circuits.edit_circuit", circuit_id=circuit_id))
+        circuit.parent_circuit_id = new_parent
+        circuit.capacity_bps_override = int(f["capacity_override"]) if f.get("capacity_override") else None
+        db.session.commit()
+        return redirect(url_for("circuits.circuit_detail", circuit_id=circuit.id))
+
+    bundles = [b for b in Circuit.query.filter_by(interface_a_id=None, interface_b_id=None).all()
+               if b.id != circuit.id]
+    return render_template("circuit_form.html", circuit=circuit, roles=CircuitRole.query.all(),
+                            interfaces=[], bundles=bundles)
+
+
+@circuits_bp.route("/<int:circuit_id>/delete", methods=["POST"])
+@login_required
+def delete_circuit(circuit_id):
+    circuit = Circuit.query.get_or_404(circuit_id)
+    if circuit.children:
+        flash(f"Can't delete '{circuit.name}' — it still has {len(circuit.children)} member circuit(s). Delete or reassign those first.")
+        return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
+    db.session.delete(circuit)
+    db.session.commit()
+    return redirect(url_for("circuits.list_circuits"))
 
 
 @circuits_bp.route("/<int:circuit_id>/mute", methods=["POST"])

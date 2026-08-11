@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-<h4>{{ device.hostname }} — {{ device.mgmt_ip }}</h4>
+<div class="d-flex justify-content-between align-items-center">
+  <h4>{{ device.hostname }} — {{ device.mgmt_ip }}</h4>
+  <div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('devices.edit_device', device_id=device.id) }}">Edit</a>
+    <form method="post" action="{{ url_for('devices.delete_device', device_id=device.id) }}" class="d-inline"
+          onsubmit="return confirm('Delete {{ device.hostname }}? This cannot be undone.');">
+      <button class="btn btn-outline-danger btn-sm">Delete</button>
+    </form>
+  </div>
+</div>
 <p>
   Site: <a href="{{ url_for('sites.site_detail', site_id=device.site_id) }}">{{ device.site.name }}</a> |
   Vendor: {{ device.vendor }} |

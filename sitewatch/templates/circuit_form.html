@@ -1,17 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
-<h4>Add circuit</h4>
+<h4>{{ 'Edit circuit' if circuit else 'Add circuit' }}</h4>
 <form method="post" class="col-md-6">
-  <div class="mb-3"><label class="form-label">Name</label><input class="form-control" name="name" required></div>
+  <div class="mb-3"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ circuit.name if circuit else '' }}" required></div>
   <div class="mb-3"><label class="form-label">Role</label>
-    <select class="form-select" name="role_id">{% for r in roles %}<option value="{{ r.id }}">{{ r.name }} ({{ r.tier }})</option>{% endfor %}</select>
+    <select class="form-select" name="role_id">
+      {% for r in roles %}<option value="{{ r.id }}" {{ 'selected' if circuit and circuit.role_id==r.id }}>{{ r.name }} ({{ r.tier }})</option>{% endfor %}
+    </select>
   </div>
   <div class="mb-3"><label class="form-label">Parent bundle (optional)</label>
     <select class="form-select" name="parent_circuit_id">
       <option value="">None</option>
-      {% for b in bundles %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}
+      {% for b in bundles %}<option value="{{ b.id }}" {{ 'selected' if circuit and circuit.parent_circuit_id==b.id }}>{{ b.name }}</option>{% endfor %}
     </select>
   </div>
+
+  {% if not circuit %}
   <div class="form-check mb-3">
     <input class="form-check-input" type="checkbox" name="is_bundle" id="is_bundle" onchange="document.getElementById('leaf-fields').classList.toggle('d-none', this.checked)">
     <label class="form-check-label" for="is_bundle">This is a bundle (no interfaces of its own)</label>
@@ -24,7 +28,19 @@
       <select class="form-select" name="interface_b_id">{% for i in interfaces %}<option value="{{ i.id }}">{{ i.device.hostname }} — {{ i.if_descr }}</option>{% endfor %}</select>
     </div>
   </div>
-  <div class="mb-3"><label class="form-label">Capacity override (bps, optional)</label><input class="form-control" name="capacity_override"></div>
+  {% else %}
+  <p class="text-muted small">
+    {% if circuit.is_bundle %}Bundle — members are managed from the circuits list, not here.
+    {% else %}{{ circuit.interface_a.device.hostname }}:{{ circuit.interface_a.if_descr }} &harr;
+               {{ circuit.interface_b.device.hostname }}:{{ circuit.interface_b.if_descr }}
+               (endpoints can't be changed here — delete and recreate the circuit if they need to change)
+    {% endif %}
+  </p>
+  {% endif %}
+
+  <div class="mb-3"><label class="form-label">Capacity override (bps, optional)</label>
+    <input class="form-control" name="capacity_override" value="{{ circuit.capacity_bps_override if circuit and circuit.capacity_bps_override else '' }}">
+  </div>
   <button class="btn btn-primary">Save</button>
 </form>
 {% endblock %}

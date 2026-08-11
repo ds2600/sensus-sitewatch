@@ -126,8 +126,9 @@ def _recompute_all_circuit_states():
 
 
 def start_poller(app):
-    interval = Setting.query.get("polling_interval_minutes")
-    minutes = int(interval.value) if interval else 2
+    with app.app_context():
+        interval = Setting.query.get("polling_interval_minutes")
+        minutes = int(interval.value) if interval else 2
 
     def job():
         with app.app_context():

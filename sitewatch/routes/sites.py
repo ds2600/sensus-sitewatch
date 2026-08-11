@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
 from sitewatch.extensions import db
@@ -29,7 +29,32 @@ def add_site():
         db.session.add(site)
         db.session.commit()
         return redirect(url_for("sites.list_sites"))
-    return render_template("site_form.html")
+    return render_template("site_form.html", site=None)
+
+
+@sites_bp.route("/<int:site_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_site(site_id):
+    site = Site.query.get_or_404(site_id)
+    if request.method == "POST":
+        site.name = request.form["name"]
+        site.lat = float(request.form["lat"])
+        site.lon = float(request.form["lon"])
+        db.session.commit()
+        return redirect(url_for("sites.site_detail", site_id=site.id))
+    return render_template("site_form.html", site=site)
+
+
+@sites_bp.route("/<int:site_id>/delete", methods=["POST"])
+@login_required
+def delete_site(site_id):
+    site = Site.query.get_or_404(site_id)
+    if site.devices:
+        flash("Can't delete a site that still has devices assigned. Remove or reassign them first.")
+        return redirect(url_for("sites.site_detail", site_id=site_id))
+    db.session.delete(site)
+    db.session.commit()
+    return redirect(url_for("sites.list_sites"))
 
 
 @sites_bp.route("/<int:site_id>")

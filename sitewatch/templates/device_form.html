@@ -1,36 +1,48 @@
 {% extends "base.html" %}
 {% block content %}
-<h4>Add device</h4>
+<h4>{{ 'Edit device' if device else 'Add device' }}</h4>
 <form method="post" class="col-md-6">
   <div class="mb-3"><label class="form-label">Site</label>
     <select class="form-select" name="site_id" required>
-      {% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if device and device.site_id==s.id }}>{{ s.name }}</option>{% endfor %}
     </select>
   </div>
-  <div class="mb-3"><label class="form-label">Hostname</label><input class="form-control" name="hostname" required></div>
-  <div class="mb-3"><label class="form-label">Management IP</label><input class="form-control" name="mgmt_ip" required></div>
+  <div class="mb-3"><label class="form-label">Hostname</label><input class="form-control" name="hostname" value="{{ device.hostname if device else '' }}" required></div>
+  <div class="mb-3"><label class="form-label">Management IP</label><input class="form-control" name="mgmt_ip" value="{{ device.mgmt_ip if device else '' }}" required></div>
   <div class="mb-3"><label class="form-label">Vendor</label>
-    <select class="form-select" name="vendor">{% for v in vendors %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select>
+    <select class="form-select" name="vendor">
+      {% for v in vendors %}<option value="{{ v }}" {{ 'selected' if device and device.vendor==v }}>{{ v }}</option>{% endfor %}
+    </select>
   </div>
   <div class="mb-3"><label class="form-label">SNMP version</label>
-    <select class="form-select" name="snmp_version" onchange="toggleSnmpFields(this.value)">
-      {% for v in snmp_versions %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
+    <select class="form-select" name="snmp_version" onchange="toggleSnmpFields(this.value)" id="snmp_version_select">
+      {% for v in snmp_versions %}<option value="{{ v }}" {{ 'selected' if device and device.snmp_version==v }}>{{ v }}</option>{% endfor %}
     </select>
   </div>
 
+  {% if device %}<p class="text-muted small">Leave credential fields blank to keep the currently stored value.</p>{% endif %}
+
   <div id="snmp-community-fields">
-    <div class="mb-3"><label class="form-label">Community string</label><input class="form-control" name="snmp_community"></div>
+    <div class="mb-3"><label class="form-label">Community string</label><input class="form-control" name="snmp_community" placeholder="{{ '(unchanged)' if device else '' }}"></div>
   </div>
   <div id="snmp-v3-fields" class="d-none">
-    <div class="mb-3"><label class="form-label">Username</label><input class="form-control" name="snmpv3_username"></div>
+    <div class="mb-3"><label class="form-label">Username</label><input class="form-control" name="snmpv3_username" value="{{ device.snmpv3_username if device and device.snmpv3_username else '' }}"></div>
     <div class="mb-3"><label class="form-label">Auth protocol</label>
-      <select class="form-select" name="snmpv3_auth_protocol"><option>SHA</option><option>MD5</option><option value="none">none</option></select>
+      <select class="form-select" name="snmpv3_auth_protocol">
+        <option {{ 'selected' if device and device.snmpv3_auth_protocol=='SHA' }}>SHA</option>
+        <option {{ 'selected' if device and device.snmpv3_auth_protocol=='MD5' }}>MD5</option>
+        <option value="none" {{ 'selected' if device and device.snmpv3_auth_protocol=='none' }}>none</option>
+      </select>
     </div>
-    <div class="mb-3"><label class="form-label">Auth key</label><input class="form-control" name="snmpv3_auth_key"></div>
+    <div class="mb-3"><label class="form-label">Auth key</label><input class="form-control" name="snmpv3_auth_key" placeholder="{{ '(unchanged)' if device else '' }}"></div>
     <div class="mb-3"><label class="form-label">Priv protocol</label>
-      <select class="form-select" name="snmpv3_priv_protocol"><option>AES</option><option>DES</option><option value="none">none</option></select>
+      <select class="form-select" name="snmpv3_priv_protocol">
+        <option {{ 'selected' if device and device.snmpv3_priv_protocol=='AES' }}>AES</option>
+        <option {{ 'selected' if device and device.snmpv3_priv_protocol=='DES' }}>DES</option>
+        <option value="none" {{ 'selected' if device and device.snmpv3_priv_protocol=='none' }}>none</option>
+      </select>
     </div>
-    <div class="mb-3"><label class="form-label">Priv key</label><input class="form-control" name="snmpv3_priv_key"></div>
+    <div class="mb-3"><label class="form-label">Priv key</label><input class="form-control" name="snmpv3_priv_key" placeholder="{{ '(unchanged)' if device else '' }}"></div>
   </div>
 
   <button class="btn btn-primary">Save</button>
@@ -42,5 +54,6 @@ function toggleSnmpFields(version) {
   document.getElementById('snmp-community-fields').classList.toggle('d-none', version === 'v3');
   document.getElementById('snmp-v3-fields').classList.toggle('d-none', version !== 'v3');
 }
+toggleSnmpFields(document.getElementById('snmp_version_select').value);
 </script>
 {% endblock %}

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
 from sitewatch.extensions import db
-from sitewatch.models import Setting, CircuitRole
+from sitewatch.models import Setting, CircuitRole, Circuit
 from sitewatch.integrations import netbox
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
@@ -34,6 +34,18 @@ def add_role():
 def update_role(role_id):
     role = CircuitRole.query.get_or_404(role_id)
     role.tier = request.form["tier"]
+    db.session.commit()
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/roles/<int:role_id>/delete", methods=["POST"])
+@login_required
+def delete_role(role_id):
+    role = CircuitRole.query.get_or_404(role_id)
+    if Circuit.query.filter_by(role_id=role.id).first():
+        flash(f"Can't delete role '{role.name}' — circuits still use it. Reassign them first.")
+        return redirect(url_for("settings.index"))
+    db.session.delete(role)
     db.session.commit()
     return redirect(url_for("settings.index"))
 
