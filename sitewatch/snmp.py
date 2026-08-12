@@ -4,12 +4,20 @@ Written against pysnmp 4.4.x hlapi (see requirements.txt pin). If you
 upgrade pysnmp, this module is the one place that needs rework — the
 v6.x API replaces these calls with an async style.
 """
+from pysnmp.error import PySnmpError
+from pysnmp.proto.rfc1905 import NoSuchInstance, NoSuchObject, EndOfMibView
 from pysnmp.hlapi import (
     SnmpEngine, CommunityData, UsmUserData, UdpTransportTarget, ContextData,
     ObjectType, ObjectIdentity, getCmd, nextCmd,
     usmHMACSHAAuthProtocol, usmHMACMD5AuthProtocol, usmNoAuthProtocol,
     usmAesCfb128Protocol, usmDESPrivProtocol, usmNoPrivProtocol,
 )
+
+# pysnmp's stand-in values for "this OID doesn't exist here" — returned in the
+# varbind itself rather than as an error_indication/error_status, so callers
+# that don't check for these end up trying to int()/str() a sentinel object
+# (e.g. NoSuchInstance stringifies to '', which crashes int('')).
+_MISSING_VALUE_TYPES = (NoSuchInstance, NoSuchObject, EndOfMibView)
 
 # IF-MIB OIDs used throughout the app
 OID_SYS_UPTIME = "1.3.6.1.2.1.1.3.0"
@@ -31,8 +39,12 @@ class SnmpError(Exception):
 
 def _auth_data(device):
     if device.snmp_version in ("v1", "v2c"):
+        if not device.snmp_community:
+            raise SnmpError("No SNMP community configured for this device.")
         mp_model = 0 if device.snmp_version == "v1" else 1
         return CommunityData(device.snmp_community, mpModel=mp_model)
+    if not device.snmpv3_username:
+        raise SnmpError("No SNMPv3 credentials configured for this device.")
     return UsmUserData(
         device.snmpv3_username,
         authKey=device.snmpv3_auth_key,
@@ -48,10 +60,20 @@ def snmp_get(device, oid, timeout=3, retries=1):
         engine, _auth_data(device), UdpTransportTarget((device.mgmt_ip, 161), timeout=timeout, retries=retries),
         ContextData(), ObjectType(ObjectIdentity(oid)),
     )
-    error_indication, error_status, _, var_binds = next(iterator)
+    try:
+        error_indication, error_status, _, var_binds = next(iterator)
+    except PySnmpError as e:
+        # Malformed/missing credentials (e.g. a device imported from NetBox,
+        # which never carries SNMP credentials) surface here as pysnmp
+        # internals, not as error_indication — normalize to SnmpError so
+        # every caller only has one exception type to handle.
+        raise SnmpError(str(e)) from e
     if error_indication or error_status:
         raise SnmpError(str(error_indication or error_status))
-    return var_binds[0][1]
+    value = var_binds[0][1]
+    if isinstance(value, _MISSING_VALUE_TYPES):
+        raise SnmpError(f"{oid} not present on this device (no such instance).")
+    return value
 
 
 def snmp_walk(device, base_oid, timeout=3, retries=1):
@@ -63,12 +85,17 @@ def snmp_walk(device, base_oid, timeout=3, retries=1):
         engine, _auth_data(device), UdpTransportTarget((device.mgmt_ip, 161), timeout=timeout, retries=retries),
         ContextData(), ObjectType(ObjectIdentity(base_oid)), lexicographicMode=False,
     )
-    for error_indication, error_status, _, var_binds in iterator:
-        if error_indication or error_status:
-            raise SnmpError(str(error_indication or error_status))
-        for oid, value in var_binds:
-            index = int(str(oid).split(".")[-1])
-            results.append((index, value))
+    try:
+        for error_indication, error_status, _, var_binds in iterator:
+            if error_indication or error_status:
+                raise SnmpError(str(error_indication or error_status))
+            for oid, value in var_binds:
+                if isinstance(value, _MISSING_VALUE_TYPES):
+                    continue
+                index = int(str(oid).split(".")[-1])
+                results.append((index, value))
+    except PySnmpError as e:
+        raise SnmpError(str(e)) from e
     return results
 
 

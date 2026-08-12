@@ -120,7 +120,23 @@ def walk_device(device_id):
 @login_required
 def repoll_device(device_id):
     device = Device.query.get_or_404(device_id)
-    poll_device_now(device)
-    flash(f"Repoll complete — {device.hostname} is now "
-          f"{'reachable' if device.reachable else 'still unreachable'}.")
+    try:
+        poll_device_now(device)
+    except SnmpError as e:
+        flash(f"Repoll failed: {e}")
+        return redirect(url_for("devices.device_detail", device_id=device_id))
+
+    if not device.reachable and not _has_snmp_credentials(device):
+        flash(f"Repoll complete — {device.hostname} is unreachable: no SNMP credentials "
+              f"configured. Set them on the Edit page (devices imported from NetBox never "
+              f"carry credentials — they must be entered manually).")
+    else:
+        flash(f"Repoll complete — {device.hostname} is now "
+              f"{'reachable' if device.reachable else 'still unreachable'}.")
     return redirect(url_for("devices.device_detail", device_id=device_id))
+
+
+def _has_snmp_credentials(device):
+    if device.snmp_version in ("v1", "v2c"):
+        return bool(device.snmp_community)
+    return bool(device.snmpv3_username)

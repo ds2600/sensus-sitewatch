@@ -17,10 +17,12 @@
   Last polled: {{ device.last_polled_at or 'never' }} |
   Last walked: {{ device.last_walked_at or 'never' }}
 </p>
-<form method="post" action="{{ url_for('devices.repoll_device', device_id=device.id) }}" class="d-inline">
+<form method="post" action="{{ url_for('devices.repoll_device', device_id=device.id) }}"
+      class="d-inline js-blocking-form" data-busy-text="Repolling {{ device.hostname }}…">
   <button class="btn btn-outline-primary">Repoll now</button>
 </form>
-<form method="post" action="{{ url_for('devices.walk_device', device_id=device.id) }}" class="d-inline mb-3">
+<form method="post" action="{{ url_for('devices.walk_device', device_id=device.id) }}"
+      class="d-inline mb-3 js-blocking-form" data-busy-text="Walking {{ device.hostname }} — discovering interfaces…">
   <button class="btn btn-outline-secondary">Walk now</button>
 </form>
 
