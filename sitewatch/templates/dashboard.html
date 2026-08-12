@@ -14,13 +14,21 @@
 
 <h5>Currently down</h5>
 <table class="table table-sm">
-  <thead><tr><th>Circuit</th><th>Down since</th></tr></thead>
+  <thead><tr><th>Circuit</th><th>Down since</th><th></th></tr></thead>
   <tbody>
     {% for h in down_now %}
-    <tr><td><a href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
-        <td>{{ h.started_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+    <tr>
+      <td><a href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
+      <td>{{ h.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>
+        <form method="post" action="{{ url_for('circuits.mute_circuit', circuit_id=h.circuit_id) }}" class="d-inline">
+          <input type="hidden" name="minutes" value="15">
+          <button class="btn btn-outline-secondary btn-sm">Mute 15m</button>
+        </form>
+      </td>
+    </tr>
     {% else %}
-    <tr><td colspan="2" class="text-muted">Nothing down.</td></tr>
+    <tr><td colspan="3" class="text-muted">Nothing down.</td></tr>
     {% endfor %}
   </tbody>
 </table>

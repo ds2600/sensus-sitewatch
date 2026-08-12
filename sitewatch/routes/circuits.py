@@ -107,10 +107,13 @@ def add_circuit():
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit.id))
 
     devices_for_form, interfaces_by_device = _endpoint_picker_data()
+    interface_a_id = request.args.get("interface_a_id", type=int)
+    preselected_interface_a = Interface.query.get(interface_a_id) if interface_a_id else None
     return render_template(
         "circuit_form.html",
         devices_for_form=devices_for_form, interfaces_by_device=interfaces_by_device,
         preselected_parent_id=request.args.get("parent_id", type=int),
+        preselected_interface_a=preselected_interface_a,
         **_form_options(),
     )
 

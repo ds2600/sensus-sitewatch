@@ -13,7 +13,10 @@
 {% if site.site_type == 'passthrough' %}
 <p class="text-muted mt-4">Passthrough location — a map waypoint with no equipment installed.</p>
 {% else %}
-<h5 class="mt-4">Devices</h5>
+<div class="d-flex align-items-center gap-2 mt-4">
+  <h5 class="mb-0">Devices</h5>
+  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('devices.add_device', site_id=site.id) }}">Add device</a>
+</div>
 <ul class="list-group mb-4">
   {% for d in devices %}
   <li class="list-group-item"><a href="{{ url_for('devices.device_detail', device_id=d.id) }}">{{ d.hostname }}</a> — {{ d.mgmt_ip }}</li>

@@ -36,20 +36,27 @@
     <label class="form-check-label" for="is_bundle">Bundle (no interfaces of its own)</label>
   </div>
   <div id="leaf-fields">
+    {% if preselected_interface_a %}
+    {% set pre_device_label = preselected_interface_a.device.hostname ~ " (" ~ preselected_interface_a.device.site.name ~ ")" %}
+    {% set pre_iface_label = preselected_interface_a.if_descr or ("ifIndex " ~ preselected_interface_a.if_index) %}
+    {% if preselected_interface_a.if_alias %}{% set pre_iface_label = pre_iface_label ~ " — " ~ preselected_interface_a.if_alias %}{% endif %}
+    {% endif %}
     <div class="row">
       <div class="col-6">
         <div class="mb-3"><label class="form-label">Interface A — device</label>
           <div class="dropdown">
-            <input class="form-control" id="device_a_search" placeholder="Search device…" autocomplete="off">
+            <input class="form-control" id="device_a_search" placeholder="Search device…" autocomplete="off"
+                   value="{{ pre_device_label if preselected_interface_a else '' }}">
             <ul class="dropdown-menu search-menu w-100" id="device_a_menu"></ul>
           </div>
         </div>
         <div class="mb-3"><label class="form-label">Interface A — interface</label>
           <div class="dropdown">
-            <input class="form-control" id="interface_a_search" placeholder="Pick a device first" autocomplete="off" disabled>
+            <input class="form-control" id="interface_a_search" placeholder="Pick a device first" autocomplete="off"
+                   value="{{ pre_iface_label if preselected_interface_a else '' }}" {{ 'disabled' if not preselected_interface_a }}>
             <ul class="dropdown-menu search-menu w-100" id="interface_a_menu"></ul>
           </div>
-          <input type="hidden" name="interface_a_id" id="interface_a_id">
+          <input type="hidden" name="interface_a_id" id="interface_a_id" value="{{ preselected_interface_a.id if preselected_interface_a else '' }}">
         </div>
       </div>
       <div class="col-6">

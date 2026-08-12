@@ -36,6 +36,7 @@
           <a href="{{ url_for('circuits.circuit_detail', circuit_id=circuits_by_interface_id[i.id].id) }}">{{ circuits_by_interface_id[i.id].name }}</a>
           {% else %}
           <span class="text-body-secondary">not monitored</span>
+          <a href="{{ url_for('circuits.add_circuit', interface_a_id=i.id) }}" class="small ms-1">add circuit</a>
           {% endif %}
         </td></tr>
     {% endfor %}

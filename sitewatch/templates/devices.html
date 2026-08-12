@@ -2,7 +2,7 @@
 {% block content %}
 <a class="btn btn-primary mb-3" href="{{ url_for('devices.add_device') }}">Add device</a>
 <table class="table">
-  <thead><tr><th>Hostname</th><th>Site</th><th>Vendor</th><th>Reachable</th></tr></thead>
+  <thead><tr><th>Hostname</th><th>Site</th><th>Vendor</th><th>Reachable</th><th></th></tr></thead>
   <tbody>
     {% for d in devices %}
     <tr>
@@ -13,6 +13,10 @@
       <td>{{ d.site.name }}</td>
       <td>{{ d.vendor }}</td>
       <td>{% if d.reachable %}<span class="badge bg-success">yes</span>{% else %}<span class="badge bg-primary">unreachable</span>{% endif %}</td>
+      <td>
+        <button type="button" class="btn btn-outline-primary btn-sm" data-job-url="{{ url_for('devices.repoll_device', device_id=d.id) }}"
+                data-job-label="Repolling {{ d.hostname }}">Repoll</button>
+      </td>
     </tr>
     {% endfor %}
   </tbody>

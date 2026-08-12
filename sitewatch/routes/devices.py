@@ -54,7 +54,8 @@ def add_device():
         return redirect(url_for("devices.device_detail", device_id=device.id))
     return render_template("device_form.html", device=None,
                             sites=Site.query.filter_by(site_type="site").all(),
-                            vendors=VENDORS, snmp_versions=SNMP_VERSIONS)
+                            vendors=VENDORS, snmp_versions=SNMP_VERSIONS,
+                            preselected_site_id=request.args.get("site_id", type=int))
 
 
 @devices_bp.route("/<int:device_id>")

@@ -2,9 +2,10 @@
 {% block content %}
 <h4>{{ 'Edit device' if device else 'Add device' }}</h4>
 <form method="post" class="col-md-6">
+  {% set effective_site_id = device.site_id if device else preselected_site_id %}
   <div class="mb-3"><label class="form-label">Site</label>
     <select class="form-select" name="site_id" required>
-      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if device and device.site_id==s.id }}>{{ s.name }}</option>{% endfor %}
+      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if effective_site_id==s.id }}>{{ s.name }}</option>{% endfor %}
     </select>
   </div>
   <div class="mb-3"><label class="form-label">Hostname</label><input class="form-control" name="hostname" value="{{ device.hostname if device else '' }}" required></div>
