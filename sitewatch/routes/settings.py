@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required
 
 from sitewatch.extensions import db
-from sitewatch.models import Setting, CircuitRole, Circuit
+from sitewatch.models import Setting, CircuitRole, Circuit, Region, Site
 from sitewatch.integrations import netbox
 from sitewatch.backup import export_data, import_data, BackupImportError, SCOPES
 from sitewatch.poller import (
@@ -35,6 +35,7 @@ def index():
         "finished_at": Setting.get("last_poll_finished_at"),
     }
     return render_template("settings.html", values=values, roles=CircuitRole.query.all(),
+                            site_regions=Region.query.order_by(Region.name).all(),
                             poll_stats=poll_stats, poller_status=get_poller_status())
 
 
@@ -91,6 +92,33 @@ def delete_role(role_id):
         flash(f"'{role.name}' is in use by circuits — reassign them first.")
         return redirect(url_for("settings.index"))
     db.session.delete(role)
+    db.session.commit()
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/site-regions/add", methods=["POST"])
+@login_required
+def add_site_region():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Name a region before adding it.")
+        return redirect(url_for("settings.index"))
+    if Region.query.filter_by(name=name).first():
+        flash(f"A region named '{name}' already exists.")
+        return redirect(url_for("settings.index"))
+    db.session.add(Region(name=name))
+    db.session.commit()
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/site-regions/<int:region_id>/delete", methods=["POST"])
+@login_required
+def delete_site_region(region_id):
+    region = Region.query.get_or_404(region_id)
+    if Site.query.filter_by(region_id=region.id).first():
+        flash(f"'{region.name}' is in use by sites — reassign them first.")
+        return redirect(url_for("settings.index"))
+    db.session.delete(region)
     db.session.commit()
     return redirect(url_for("settings.index"))
 

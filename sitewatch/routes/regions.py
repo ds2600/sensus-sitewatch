@@ -18,10 +18,10 @@ def manage_regions():
 def add_region():
     name = request.form.get("name", "").strip()
     if not name:
-        flash("Name a region before saving it.")
+        flash("Name the view before saving it.")
         return redirect(url_for("regions.manage_regions"))
     if MapRegion.query.filter_by(name=name).first():
-        flash(f"A region named '{name}' already exists.")
+        flash(f"A view named '{name}' already exists.")
         return redirect(url_for("regions.manage_regions"))
     db.session.add(MapRegion(
         name=name,
@@ -30,7 +30,7 @@ def add_region():
         zoom=int(request.form["zoom"]),
     ))
     db.session.commit()
-    flash(f"Region '{name}' saved.")
+    flash(f"View '{name}' saved.")
     return redirect(url_for("regions.manage_regions"))
 
 

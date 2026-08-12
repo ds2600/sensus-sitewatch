@@ -1,8 +1,9 @@
 """JSON endpoints for the map and the in-browser alert widget."""
 from flask import Blueprint, jsonify, request
 from flask_login import login_required
+from sqlalchemy import or_
 
-from sitewatch.models import Site, Device, Circuit, CircuitStatusHistory, AlertMute
+from sitewatch.models import Site, Device, Circuit, CircuitStatusHistory, AlertMute, Region
 from sitewatch.status import compute_site_status
 from sitewatch.poller import get_poller_status
 from sitewatch import job_log
@@ -13,7 +14,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 @api_bp.route("/map")
 @login_required
 def map_data():
-    sites = [{"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
+    sites = [{"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon, "region_id": s.region_id,
               "status": compute_site_status(s), "site_type": s.site_type} for s in Site.query.all()]
 
     lines = []
@@ -56,12 +57,15 @@ def status():
 @login_required
 def search():
     """Navbar quick search — substring match across sites/devices/circuits,
-    grouped and capped per type so the dropdown stays short."""
+    grouped and capped per type so the dropdown stays short. Sites also
+    match on their region's name, so "search for sites" covers finding a
+    region's whole member list, not just a site by its own name."""
     q = request.args.get("q", "").strip()
     if len(q) < 2:
         return jsonify({"sites": [], "devices": [], "circuits": []})
     like = f"%{q}%"
-    sites = Site.query.filter(Site.name.ilike(like)).order_by(Site.name).limit(5).all()
+    sites = (Site.query.outerjoin(Region).filter(or_(Site.name.ilike(like), Region.name.ilike(like)))
+             .order_by(Site.name).limit(5).all())
     devices = Device.query.filter(Device.hostname.ilike(like)).order_by(Device.hostname).limit(5).all()
     circuits = Circuit.query.filter(Circuit.name.ilike(like)).order_by(Circuit.name).limit(5).all()
     return jsonify({

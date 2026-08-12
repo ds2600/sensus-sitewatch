@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
 from sitewatch.extensions import db
-from sitewatch.models import Site, Circuit, SITE_TYPES
+from sitewatch.models import Site, Circuit, Region, SITE_TYPES
 from sitewatch.status import compute_site_status, site_degree_breakdown
 
 sites_bp = Blueprint("sites", __name__, url_prefix="/sites")
@@ -11,9 +11,14 @@ sites_bp = Blueprint("sites", __name__, url_prefix="/sites")
 @sites_bp.route("/")
 @login_required
 def list_sites():
-    sites = Site.query.all()
+    region_id = request.args.get("region_id", type=int)
+    query = Site.query
+    if region_id:
+        query = query.filter_by(region_id=region_id)
+    sites = query.all()
     statuses = {s.id: compute_site_status(s) for s in sites}
-    return render_template("sites.html", sites=sites, statuses=statuses)
+    return render_template("sites.html", sites=sites, statuses=statuses,
+                            regions=Region.query.order_by(Region.name).all(), selected_region_id=region_id)
 
 
 @sites_bp.route("/add", methods=["GET", "POST"])
@@ -28,12 +33,13 @@ def add_site():
             lat=float(request.form["lat"]),
             lon=float(request.form["lon"]),
             site_type=site_type,
+            region_id=request.form.get("region_id", type=int) or None,
             source="manual",
         )
         db.session.add(site)
         db.session.commit()
         return redirect(url_for("sites.list_sites"))
-    return render_template("site_form.html", site=None)
+    return render_template("site_form.html", site=None, regions=Region.query.order_by(Region.name).all())
 
 
 @sites_bp.route("/<int:site_id>/edit", methods=["GET", "POST"])
@@ -51,9 +57,10 @@ def edit_site(site_id):
         site.lat = float(request.form["lat"])
         site.lon = float(request.form["lon"])
         site.site_type = site_type
+        site.region_id = request.form.get("region_id", type=int) or None
         db.session.commit()
         return redirect(url_for("sites.site_detail", site_id=site.id))
-    return render_template("site_form.html", site=site)
+    return render_template("site_form.html", site=site, regions=Region.query.order_by(Region.name).all())
 
 
 @sites_bp.route("/<int:site_id>/delete", methods=["POST"])

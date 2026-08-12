@@ -26,12 +26,19 @@ database from scoped exports, import in dependency order: sites, then
 devices, then circuits, then regions, then settings (any order relative
 to each other). Preserves original ids so foreign keys resolve without a
 remapping pass, same as the full backup always has.
+
+Two same-named-but-different "region" concepts exist in this app — Region
+(Site.region_id, an organizational tag for sorting/filtering/search) and
+MapRegion (a saved map camera position, no site membership; UI-labeled
+"map view" to avoid the collision). Region rides inside the "sites" scope
+(like circuit_roles rides inside "circuits") since it's owned by sites the
+same way; the "regions" scope here is MapRegion only.
 """
 from datetime import datetime
 
 from sitewatch.extensions import db
 from sitewatch.models import (
-    Site, Device, Interface, CircuitRole, Circuit, CircuitWaypoint, MapRegion, Setting,
+    Site, Device, Interface, CircuitRole, Circuit, CircuitWaypoint, MapRegion, Region, Setting,
     CircuitStatusHistory, AlertMute, UtilizationRollup,
 )
 
@@ -61,11 +68,18 @@ class BackupImportError(Exception):
 
 
 def _export_sites():
-    return {"sites": [
-        {"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
-         "site_type": s.site_type, "netbox_id": s.netbox_id, "source": s.source}
-        for s in Site.query.all()
-    ]}
+    return {
+        "sites": [
+            {"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
+             "site_type": s.site_type, "region_id": s.region_id,
+             "netbox_id": s.netbox_id, "source": s.source}
+            for s in Site.query.all()
+        ],
+        # Region (site grouping, not MapRegion) is owned by sites the same
+        # way circuit_roles is owned by circuits — exported alongside so a
+        # sites-only restore doesn't leave region_id pointing at nothing.
+        "site_regions": [{"id": r.id, "name": r.name} for r in Region.query.all()],
+    }
 
 
 def _export_devices():
@@ -167,6 +181,7 @@ def _validate(data, expected_scope):
 
 def _wipe_sites():
     Site.query.delete()
+    Region.query.delete()
 
 
 def _wipe_devices():
@@ -187,10 +202,14 @@ def _wipe_regions():
 
 
 def _load_sites(data):
+    # Regions first — sites below may reference them via region_id.
+    for r in data.get("site_regions", []):
+        db.session.add(Region(id=r["id"], name=r["name"]))
     for s in data["sites"]:
         db.session.add(Site(
             id=s["id"], name=s["name"], lat=s["lat"], lon=s["lon"],
             site_type=s.get("site_type", "site"),
+            region_id=s.get("region_id"),
             netbox_id=s.get("netbox_id"), source=s.get("source", "manual"),
             out_of_sync=False,
         ))

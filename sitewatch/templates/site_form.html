@@ -15,6 +15,15 @@
     </select>
     <div class="form-text">Passthrough: map marker only, no devices.</div>
   </div>
+  <div class="mb-3"><label class="form-label">Region</label>
+    <select class="form-select" name="region_id">
+      <option value="">&mdash; none &mdash;</option>
+      {% for r in regions %}
+      <option value="{{ r.id }}" {{ 'selected' if site and site.region_id == r.id }}>{{ r.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">For sorting/filtering the Sites list. <a href="{{ url_for('settings.index') }}#site-regions">Manage regions</a>.</div>
+  </div>
   <button class="btn btn-primary">Save</button>
 </form>
 {% endblock %}

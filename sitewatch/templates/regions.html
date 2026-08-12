@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% from "_macros.html" import breadcrumb %}
 {% block content %}
-{{ breadcrumb([("Settings", url_for('settings.index')), ("Manage regions", none)]) }}
+{{ breadcrumb([("Settings", url_for('settings.index')), ("Manage map views", none)]) }}
 <div class="d-flex align-items-center gap-2 mb-2">
-  <h4 class="mb-0">Manage regions</h4>
-  <button type="button" class="btn btn-primary btn-sm" id="save_region_btn">Save current view as region</button>
+  <h4 class="mb-0">Manage map views</h4>
+  <button type="button" class="btn btn-primary btn-sm" id="save_region_btn">Save current view</button>
 </div>
-<p class="text-body-secondary small">Pan/zoom to the view you want, then save it as a named region.</p>
+<p class="text-body-secondary small">Pan/zoom to the view you want, then save it as a named view.</p>
 <div id="region-edit-map" class="mb-4 rounded"></div>
 
-<h5>Saved regions</h5>
+<h5>Saved views</h5>
 <table class="table table-sm col-md-6">
   <thead><tr><th>Name</th><th>Zoom</th><th></th><th></th></tr></thead>
   <tbody>
@@ -25,7 +25,7 @@
       </td>
       <td>
         <form method="post" action="{{ url_for('regions.delete_region', region_id=r.id) }}"
-              onsubmit="return confirm('Delete region {{ r.name }}?');">
+              onsubmit="return confirm('Delete view {{ r.name }}?');">
           <button class="btn btn-outline-danger btn-sm">Delete</button>
         </form>
       </td>
@@ -41,11 +41,11 @@
     <div class="modal-content">
       <form method="post" action="{{ url_for('regions.add_region') }}">
         <div class="modal-header">
-          <h5 class="modal-title">Save region</h5>
+          <h5 class="modal-title">Save view</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <input class="form-control" name="name" placeholder="Region name" required autofocus>
+          <input class="form-control" name="name" placeholder="View name" required autofocus>
           <input type="hidden" name="center_lat" id="save_center_lat">
           <input type="hidden" name="center_lon" id="save_center_lon">
           <input type="hidden" name="zoom" id="save_zoom">

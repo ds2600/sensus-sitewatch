@@ -70,18 +70,31 @@ class Setting(db.Model):
                 db.session.add(Setting(key=k, value=v))
 
 
+class Region(db.Model):
+    """Organizational grouping on Site — for sorting/filtering/search
+    (Sites list, quick search). Unrelated to MapRegion, which is a saved
+    map camera position with no site membership; the map's region picker
+    auto-fits to a Region's member sites instead of storing its own
+    lat/lon/zoom, so the two never need to be the same model."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Site(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     lat = db.Column(db.Float, nullable=False)
     lon = db.Column(db.Float, nullable=False)
     site_type = db.Column(db.String(20), default="site")  # site | passthrough — see SITE_TYPES
+    region_id = db.Column(db.Integer, db.ForeignKey("region.id"), nullable=True)
     netbox_id = db.Column(db.Integer, nullable=True)
     source = db.Column(db.String(20), default="manual")
     out_of_sync = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     devices = db.relationship("Device", backref="site", lazy=True)
+    region = db.relationship("Region", backref="sites")
 
 
 class Device(db.Model):
