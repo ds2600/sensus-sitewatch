@@ -92,32 +92,42 @@ To run persistently instead of foreground: use `nohup`, `screen`, `tmux`, or a s
 | Setting | Default | Notes |
 |---|---|---|
 | Polling interval | 2 minutes | applies to all devices unless overridden per-device |
-| Down threshold | 3 consecutive failed polls | prevents single dropped poll from flagping a circuit down |
-| Default SNMP version | v2c | set per-device, this is just the form default |
+| Down threshold | 3 consecutive failed polls | prevents single dropped poll from flagging a circuit down |
+| Max concurrent devices polled | 8 | how many devices get SNMP-polled at once each cycle — a different knob from gunicorn's `--workers`, see Section 15.2 |
+| SNMP version | v1 (Add Device form's first option — not actually configured here) | set per-device on the Add/Edit Device form |
 | Google Chat webhook URL | blank | required for alert delivery |
 | Alert mute max duration | 60 minutes | hard cap, not editable per-mute beyond this |
+| Status history retention | 30 days | stored, but nothing prunes old records yet — no effect until that's implemented |
 
-Circuit roles (tier mapping) also live in Settings — see Section 7.
+Circuit roles (tier mapping) also live in Settings — see Section 9.
 
 ---
 
 ## 5. Adding sites
 
-Two paths:
+Three paths:
 
 **Manual**: Sites page → Add Site → name, latitude, longitude.
+
+**CSV import**: Sites page → Import CSV. Columns: Site, Lat, Long, Type (Type optional, defaults to "site"; the other allowed value is "passthrough"). Upload, review a per-row validation preview (nothing is written until you confirm), then import.
 
 **NetBox sync**: Settings → NetBox → Sync Now. Pulls sites as NetBox Sites. Requires `NETBOX_URL` and `NETBOX_TOKEN` set in `.env`. Re-run Sync Now any time to pick up new/changed sites. Sync is pull-only — nothing pushes back to NetBox.
 
 If a site is deleted in NetBox, it is not auto-deleted here. It is flagged "out of sync" on the Sites page. Review and remove manually if confirmed gone.
 
+Sites can optionally be grouped into **Regions** (Settings → Regions) for sorting/filtering the Sites list and quick search — unrelated to the map's own "Map views" (saved camera positions, Settings → Map views).
+
 ---
 
 ## 6. Adding devices
 
-Devices page → Add Device (or pulled via NetBox sync, same out-of-sync flagging rule applies).
+Two paths:
 
-Required fields:
+**Manual**: Devices page → Add Device (or pulled via NetBox sync, same out-of-sync flagging rule applies).
+
+**CSV import**: Devices page → Import CSV. Columns: Site, Hostname, Mgmt IP, Vendor. Site must match an existing site by name; Hostname/Mgmt IP are rejected if already in use. SNMP credentials aren't part of the CSV — add them per device afterward (same as below).
+
+Required fields either way:
 - Hostname / management IP
 - Site (assign to one)
 - Vendor: IOS-XE / IOS-XR / Junos
@@ -208,9 +218,11 @@ Retention: configurable in Settings, no default assumed yet — set based on how
 - Encryption key: `.env` — back this up separately from the database, or encrypted credentials become unrecoverable
 - Back up by copying the `.db` file. Stop the app first, or accept a small risk of an in-flight write being mid-transaction (SQLite handles this reasonably well, but a clean stop is safer)
 
-**JSON export/import** (Settings → Backup & restore) is a lighter-weight alternative to copying the `.db` file — useful for moving config between environments, or a quick config-only snapshot. Export downloads a JSON file with sites, devices, interfaces, circuits, circuit roles, and settings. It does **not** include device credentials (SNMP community/keys, SSH password) — those never leave `crypto.py` in plaintext, so every device needs its credentials re-entered after an import. It also does not include user accounts or historical data (status history, utilization rollups) — those regenerate or stay as-is.
+**JSON export/import** (Settings → Backup & restore) is a lighter-weight alternative to copying the `.db` file — useful for moving config between environments, or a quick config-only snapshot. "Export backup all" downloads sites (incl. regions), devices, interfaces, circuits, circuit roles, map views, and settings in one file. It does **not** include device credentials (SNMP community/keys, SSH password) — those never leave `crypto.py` in plaintext, so every device needs its credentials re-entered after an import. It also does not include user accounts or historical data (status history, utilization rollups) — those regenerate or stay as-is.
 
-Import is a full replace: it wipes existing sites/devices/interfaces/circuits/roles/settings and reloads from the file. This can't be undone — export a fresh backup first if you want a way back. User accounts are left untouched so you don't lock yourself out.
+The same page also has per-object export/import (Sites, Devices, Circuits, Map views, Settings) — useful for sharing just one slice of config, or recovering part of the data if a future schema change breaks a full-backup import.
+
+Import is a full replace, but only *of what you imported*: "Import backup all" wipes and reloads everything listed above; a per-object import only wipes/reloads that one object type; e.g. importing just Sites never touches Devices, even though devices reference a site. This can't be undone — export a fresh backup first if you want a way back. User accounts are left untouched either way, so you don't lock yourself out.
 
 ---
 
@@ -286,6 +298,19 @@ request handling since it runs in Flask's app context, not inside a
 request. If you outgrow this, the poller needs to be split into its own
 process (a separate entrypoint that only calls `poll_all_devices()`,
 scheduled independently of the web workers) — not implemented today.
+
+Don't confuse this with **Max concurrent devices polled** (Settings page,
+default 8) — that's a different, unrelated knob: within one poll cycle, on
+one worker process, it controls how many devices get their SNMP data
+fetched at the same time (a thread pool inside `poll_all_devices()`, not a
+process). Raising it speeds up a poll cycle against many devices; it has
+no relationship to `--workers`, which must still stay at 1.
+
+SQLite is already configured for this (`sitewatch/extensions.py`: WAL
+journal mode + a 30s busy timeout), so `--threads 4` serving requests
+concurrently while the poller writes in the background isn't a concern —
+a writer no longer blocks readers under WAL, and a second writer waits up
+to 30s instead of failing immediately with "database is locked."
 
 ### 15.3 systemd service
 

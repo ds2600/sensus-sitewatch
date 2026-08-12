@@ -126,8 +126,8 @@ async function loadMap() {
   // shares close to the same coordinates.
   data.sites.filter((s) => s.site_type === "passthrough").forEach((s) => {
     L.circleMarker([s.lat, s.lon], {
-      radius: 5, color: STATUS_COLOR.passthrough, fillColor: STATUS_COLOR.passthrough,
-      weight: 1, opacity: 0.6, fillOpacity: 0.35,
+      radius: 6, color: STATUS_COLOR.passthrough, fillColor: STATUS_COLOR.passthrough,
+      weight: 1, opacity: 0.85, fillOpacity: 0.55,
     }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a> (passthrough)`).addTo(map);
   });
 

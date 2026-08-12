@@ -1,9 +1,9 @@
 # Copy to /etc/nginx/sites-available/sitewatch, symlink into sites-enabled,
-# then edit server_name and the ssl_certificate paths. See README section 16.
+# then edit server_name and the ssl_certificate paths. See README section 15.
 #
 # TLS matters here even for a LAN-only internal tool: login posts the
 # admin password in plaintext over HTTP otherwise. A self-signed cert is
-# fine for internal-only access (README section 16 has the openssl command);
+# fine for internal-only access (README section 15 has the openssl command);
 # use a real CA-issued cert if one is available.
 
 server {

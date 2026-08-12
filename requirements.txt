@@ -11,4 +11,4 @@ pynetbox==7.3.3
 cryptography==42.0.5
 requests==2.31.0
 python-dotenv==1.0.1
-gunicorn==23.0.0  # production WSGI server; see README section 16
+gunicorn==23.0.0  # production WSGI server; see README section 15

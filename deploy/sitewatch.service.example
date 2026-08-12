@@ -1,5 +1,5 @@
 # Copy to /etc/systemd/system/sitewatch.service, then edit User/Group and
-# WorkingDirectory for your install path (see README section 16).
+# WorkingDirectory for your install path (see README section 15).
 #
 # --workers MUST stay at 1. The background poller (APScheduler) starts once
 # per worker process on app startup — a second worker means a second poller
