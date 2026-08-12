@@ -14,13 +14,14 @@
     <script id="roles-data" type="application/json">{{ roles_for_form | tojson }}</script>
   </div>
 
+  {% set effective_parent_id = circuit.parent_circuit_id if circuit else preselected_parent_id %}
   <div class="mb-3"><label class="form-label">Parent bundle</label>
     <div class="dropdown">
       <input class="form-control" id="parent_search" placeholder="None" autocomplete="off"
-             value="{{ (bundles_for_form | selectattr('id', 'equalto', circuit.parent_circuit_id) | first).label if circuit and circuit.parent_circuit_id else '' }}">
+             value="{{ (bundles_for_form | selectattr('id', 'equalto', effective_parent_id) | first).label if effective_parent_id else '' }}">
       <ul class="dropdown-menu search-menu w-100" id="parent_menu"></ul>
     </div>
-    <input type="hidden" name="parent_circuit_id" id="parent_circuit_id" value="{{ circuit.parent_circuit_id if circuit and circuit.parent_circuit_id else '' }}">
+    <input type="hidden" name="parent_circuit_id" id="parent_circuit_id" value="{{ effective_parent_id or '' }}">
     <script id="bundles-data" type="application/json">{{ bundles_for_form | tojson }}</script>
   </div>
 

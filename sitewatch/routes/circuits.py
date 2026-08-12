@@ -87,6 +87,7 @@ def add_circuit():
     return render_template(
         "circuit_form.html",
         devices_for_form=devices_for_form, interfaces_by_device=interfaces_by_device,
+        preselected_parent_id=request.args.get("parent_id", type=int),
         **_form_options(),
     )
 
