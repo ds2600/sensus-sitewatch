@@ -1,6 +1,6 @@
 // Renders the site/circuit map on the dashboard. Colors follow status.py's
 // green/yellow/red for sites, plus per-circuit state for lines.
-const STATUS_COLOR = { green: "#198754", yellow: "#ffc107", red: "#dc3545", blue: "#0d6efd", passthrough: "#6f42c1" };
+const STATUS_COLOR = { green: "#198754", yellow: "#ffc107", red: "#dc3545", blue: "#0d6efd", passthrough: "#8a8fa3" };
 const CIRCUIT_COLOR = { up: "#198754", degraded: "#ffc107", down: "#dc3545",
                          admin_down: "#6c757d", unreachable: "#0d6efd" };
 
@@ -121,13 +121,24 @@ async function loadMap() {
     });
   });
 
-  data.sites.forEach((s) => {
-    const isPassthrough = s.site_type === "passthrough";
+  // Passthrough markers first and deliberately muted (small, translucent,
+  // no bringToFront) — they're map waypoints, not monitored sites, and at
+  // a zoomed-out view with real sites sparse they used to visually dominate
+  // the screen at full-strength purple. Real sites draw after and get
+  // bringToFront, so they always sit on top even where a passthrough point
+  // shares close to the same coordinates.
+  data.sites.filter((s) => s.site_type === "passthrough").forEach((s) => {
     L.circleMarker([s.lat, s.lon], {
-      radius: isPassthrough ? 7 : 10, color: STATUS_COLOR[s.status], fillColor: STATUS_COLOR[s.status],
+      radius: 5, color: STATUS_COLOR.passthrough, fillColor: STATUS_COLOR.passthrough,
+      weight: 1, opacity: 0.6, fillOpacity: 0.35,
+    }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a> (passthrough)`).addTo(map);
+  });
+
+  data.sites.filter((s) => s.site_type !== "passthrough").forEach((s) => {
+    L.circleMarker([s.lat, s.lon], {
+      radius: 10, color: STATUS_COLOR[s.status], fillColor: STATUS_COLOR[s.status],
       fillOpacity: 0.9,
-    }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a>${isPassthrough ? " (passthrough)" : ""}`)
-      .addTo(map).bringToFront();
+    }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a>`).addTo(map).bringToFront();
   });
 
   const regionSelect = document.getElementById("region_select");

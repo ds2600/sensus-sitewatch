@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
+{% block content %}
+{{ breadcrumb([("Devices", url_for('devices.list_devices')), ("Import", none)]) }}
+<h4>Import devices from CSV</h4>
+
+<p class="text-body-secondary">
+  Columns, in any order (matched case-insensitively):
+</p>
+<table class="table table-sm col-md-8 mb-3">
+  <thead><tr><th>Column</th><th>Required</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Site</td><td>Yes</td><td>Must match an existing site's name exactly.</td></tr>
+    <tr><td>Hostname</td><td>Yes</td><td>Must not already be in use.</td></tr>
+    <tr><td>Mgmt IP</td><td>Yes</td><td>Valid IP address, must not already be in use.</td></tr>
+    <tr><td>Vendor</td><td>Yes</td><td>One of: {{ vendors|join(', ') }}.</td></tr>
+  </tbody>
+</table>
+<p class="text-body-secondary small mb-3">
+  SNMP credentials aren't imported — add them on each device's Edit page before it can be polled.
+</p>
+<p class="mb-4">
+  <a href="{{ url_for('devices.import_devices_template') }}">Download a CSV template</a>
+</p>
+
+<form method="post" action="{{ url_for('devices.import_devices_preview') }}" enctype="multipart/form-data"
+      class="d-flex gap-2 col-md-8">
+  <input type="file" name="csv_file" accept=".csv,text/csv" class="form-control" required>
+  <button class="btn btn-primary text-nowrap">Preview import</button>
+</form>
+<p class="text-body-secondary small mt-2">Nothing is added until you review and confirm on the next page.</p>
+{% endblock %}

@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<a class="btn btn-primary mb-3" href="{{ url_for('devices.add_device') }}">Add device</a>
+<div class="d-flex gap-2 mb-3">
+  <a class="btn btn-primary" href="{{ url_for('devices.add_device') }}">Add device</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('devices.import_devices') }}">Import CSV</a>
+</div>
 {% if not devices %}
 <p class="text-body-secondary">No devices yet. <a href="{{ url_for('devices.add_device') }}">Add the first one</a>.</p>
 {% else %}

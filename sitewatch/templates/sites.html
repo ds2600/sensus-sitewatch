@@ -2,6 +2,7 @@
 {% block content %}
 <div class="d-flex align-items-center gap-2 mb-3">
   <a class="btn btn-primary" href="{{ url_for('sites.add_site') }}">Add site</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('sites.import_sites') }}">Import CSV</a>
   {% if regions %}
   <form method="get" class="d-flex align-items-center gap-2">
     <select class="form-select form-select-sm w-auto" name="region_id" onchange="this.form.submit()">

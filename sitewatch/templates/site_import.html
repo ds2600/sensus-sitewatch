@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
+{% block content %}
+{{ breadcrumb([("Sites", url_for('sites.list_sites')), ("Import", none)]) }}
+<h4>Import sites from CSV</h4>
+
+<p class="text-body-secondary">
+  Columns, in any order (matched case-insensitively):
+</p>
+<table class="table table-sm col-md-8 mb-3">
+  <thead><tr><th>Column</th><th>Required</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Site</td><td>Yes</td><td>Name — anything.</td></tr>
+    <tr><td>Lat</td><td>Yes</td><td>Number, -90 to 90.</td></tr>
+    <tr><td>Long</td><td>Yes</td><td>Number, -180 to 180.</td></tr>
+    <tr><td>Type</td><td>No</td>
+        <td>One of: {{ site_types|join(', ') }}. Blank defaults to "site".</td></tr>
+  </tbody>
+</table>
+<p class="mb-4">
+  <a href="{{ url_for('sites.import_sites_template') }}">Download a CSV template</a>
+</p>
+
+<form method="post" action="{{ url_for('sites.import_sites_preview') }}" enctype="multipart/form-data"
+      class="d-flex gap-2 col-md-8">
+  <input type="file" name="csv_file" accept=".csv,text/csv" class="form-control" required>
+  <button class="btn btn-primary text-nowrap">Preview import</button>
+</form>
+<p class="text-body-secondary small mt-2">Nothing is added until you review and confirm on the next page.</p>
+{% endblock %}

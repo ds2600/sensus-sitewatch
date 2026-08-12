@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
+{% block content %}
+{{ breadcrumb([("Devices", url_for('devices.list_devices')), ("Import", url_for('devices.import_devices')), ("Preview", none)]) }}
+<h4>Preview import</h4>
+<p class="text-body-secondary">{{ valid_count }} of {{ total_count }} row(s) valid.</p>
+
+<table class="table table-sm">
+  <thead><tr><th>#</th><th>Site</th><th>Hostname</th><th>Mgmt IP</th><th>Vendor</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr class="{{ 'table-danger' if r.errors else '' }}">
+      <td>{{ r.row_num }}</td>
+      <td>{{ r.site }}</td>
+      <td>{{ r.hostname }}</td>
+      <td>{{ r.mgmt_ip }}</td>
+      <td>{{ r.vendor }}</td>
+      <td>
+        {% if r.errors %}
+        {% for e in r.errors %}<div class="small">{{ e }}</div>{% endfor %}
+        {% else %}
+        <span class="small">OK</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if valid_count %}
+<form method="post" action="{{ url_for('devices.import_devices_confirm') }}">
+  {% for r in rows if not r.errors %}
+  <input type="hidden" name="row_site_id" value="{{ r.site_id }}">
+  <input type="hidden" name="row_hostname" value="{{ r.hostname }}">
+  <input type="hidden" name="row_mgmt_ip" value="{{ r.mgmt_ip }}">
+  <input type="hidden" name="row_vendor" value="{{ r.vendor }}">
+  {% endfor %}
+  <button class="btn btn-primary">Import {{ valid_count }} valid device{{ 's' if valid_count != 1 else '' }}</button>
+  <a href="{{ url_for('devices.import_devices') }}" class="btn btn-outline-secondary">Upload a different file</a>
+</form>
+{% else %}
+<p class="text-danger">No valid rows to import. Fix the errors above and upload again.</p>
+<a href="{{ url_for('devices.import_devices') }}" class="btn btn-outline-secondary">Back</a>
+{% endif %}
+{% endblock %}

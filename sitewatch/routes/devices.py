@@ -1,6 +1,7 @@
+import ipaddress
 import threading
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
 from flask_login import login_required
 
 from sitewatch.extensions import db
@@ -8,8 +9,16 @@ from sitewatch.models import Device, Site, Circuit, VENDORS, SNMP_VERSIONS
 from sitewatch.discovery import perform_walk
 from sitewatch.poller import poll_device_now
 from sitewatch import job_log
+from sitewatch.csv_import import parse_csv, CsvImportError
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
+
+_DEVICE_CSV_HEADER_ALIASES = {
+    "site": ["site", "site name"],
+    "hostname": ["hostname", "host"],
+    "mgmt_ip": ["mgmt ip", "management ip", "ip", "ip address", "mgmt_ip"],
+    "vendor": ["vendor"],
+}
 
 
 def _apply_credentials(device, f):
@@ -56,6 +65,113 @@ def add_device():
                             sites=Site.query.filter_by(site_type="site").all(),
                             vendors=VENDORS, snmp_versions=SNMP_VERSIONS,
                             preselected_site_id=request.args.get("site_id", type=int))
+
+
+@devices_bp.route("/import")
+@login_required
+def import_devices():
+    return render_template("device_import.html", vendors=VENDORS)
+
+
+@devices_bp.route("/import/template")
+@login_required
+def import_devices_template():
+    csv_text = "Site,Hostname,Mgmt IP,Vendor\nExample HQ,core-rtr-01,10.0.0.1,ios-xe\n"
+    return Response(csv_text, mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=sitewatch-devices-template.csv"})
+
+
+@devices_bp.route("/import/preview", methods=["POST"])
+@login_required
+def import_devices_preview():
+    file = request.files.get("csv_file")
+    if not file or file.filename == "":
+        flash("Choose a CSV file.")
+        return redirect(url_for("devices.import_devices"))
+    try:
+        rows = parse_csv(file, _DEVICE_CSV_HEADER_ALIASES)
+    except CsvImportError as e:
+        flash(str(e))
+        return redirect(url_for("devices.import_devices"))
+
+    sites_by_name = {s.name.strip().lower(): s for s in Site.query.all()}
+    existing_hostnames = {d.hostname.strip().lower() for d in Device.query.all()}
+    existing_ips = {d.mgmt_ip.strip() for d in Device.query.all()}
+    seen_hostnames = set()
+    seen_ips = set()
+
+    preview_rows = []
+    for i, row in enumerate(rows, start=1):
+        errors = []
+
+        site_name = row["site"]
+        site = sites_by_name.get(site_name.strip().lower()) if site_name else None
+        if not site_name:
+            errors.append("Site is required.")
+        elif site is None:
+            errors.append(f"Site '{site_name}' not found.")
+        elif site.site_type == "passthrough":
+            errors.append(f"'{site_name}' is a passthrough site — can't have devices.")
+
+        hostname = row["hostname"]
+        hostname_key = hostname.strip().lower()
+        if not hostname:
+            errors.append("Hostname is required.")
+        elif hostname_key in existing_hostnames:
+            errors.append(f"Hostname '{hostname}' already exists.")
+        elif hostname_key in seen_hostnames:
+            errors.append(f"Hostname '{hostname}' is duplicated earlier in this file.")
+
+        mgmt_ip = row["mgmt_ip"]
+        if not mgmt_ip:
+            errors.append("Mgmt IP is required.")
+        else:
+            try:
+                ipaddress.ip_address(mgmt_ip)
+                if mgmt_ip in existing_ips:
+                    errors.append(f"Mgmt IP '{mgmt_ip}' already exists.")
+                elif mgmt_ip in seen_ips:
+                    errors.append(f"Mgmt IP '{mgmt_ip}' is duplicated earlier in this file.")
+            except ValueError:
+                errors.append(f"'{mgmt_ip}' isn't a valid IP address.")
+
+        vendor = row["vendor"].strip().lower()
+        if vendor not in VENDORS:
+            errors.append(f"Vendor must be one of: {', '.join(VENDORS)}.")
+
+        if hostname_key:
+            seen_hostnames.add(hostname_key)
+        if mgmt_ip:
+            seen_ips.add(mgmt_ip)
+
+        preview_rows.append({
+            "row_num": i, "site": site_name, "site_id": site.id if site else None,
+            "hostname": hostname, "mgmt_ip": mgmt_ip, "vendor": vendor, "errors": errors,
+        })
+
+    valid_count = sum(1 for r in preview_rows if not r["errors"])
+    return render_template("device_import_preview.html", rows=preview_rows,
+                            valid_count=valid_count, total_count=len(preview_rows))
+
+
+@devices_bp.route("/import/confirm", methods=["POST"])
+@login_required
+def import_devices_confirm():
+    site_ids = request.form.getlist("row_site_id")
+    hostnames = request.form.getlist("row_hostname")
+    mgmt_ips = request.form.getlist("row_mgmt_ip")
+    vendors = request.form.getlist("row_vendor")
+    if not hostnames:
+        flash("Nothing to import.")
+        return redirect(url_for("devices.import_devices"))
+    for site_id, hostname, mgmt_ip, vendor in zip(site_ids, hostnames, mgmt_ips, vendors):
+        db.session.add(Device(
+            site_id=int(site_id), hostname=hostname, mgmt_ip=mgmt_ip,
+            vendor=vendor, snmp_version="v2c", source="manual",
+        ))
+    db.session.commit()
+    flash(f"Imported {len(hostnames)} device(s). Add SNMP credentials on each device's Edit page before polling.")
+    return redirect(url_for("devices.list_devices"))
 
 
 @devices_bp.route("/<int:device_id>")
