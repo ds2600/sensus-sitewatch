@@ -1,10 +1,16 @@
 """Background polling job. One pass = check every device's reachability,
-GET each known interface's counters/status, apply the down-threshold
-debounce, roll bundle/site status up, and fire alerts on new down events.
+GET each circuit-linked interface's counters/status, apply the
+down-threshold debounce, roll bundle/site status up, and fire alerts on new
+down events.
 
 Full interface discovery (walk_interfaces) does NOT happen here — that's
-triggered manually per device. This loop only polls interfaces already
-known to the DB.
+triggered manually per device, and discovers every interface on the box.
+This loop deliberately polls a much smaller set: only interfaces actually
+wired into a circuit (see _monitored_interface_ids). A device can easily
+have hundreds of interfaces from a walk but only a handful ever become
+circuits — polling all of them every cycle (4 SNMP GETs each) was most of
+what made poll cycles slow for no operational benefit, since sitewatch has
+no use for telemetry on an interface no circuit references.
 """
 from datetime import datetime, timedelta, timezone
 import logging
@@ -39,8 +45,9 @@ def poll_all_devices():
     try:
         started = time.monotonic()
         device_count = 0
+        monitored_ids = _monitored_interface_ids()
         for device in Device.query.all():
-            _poll_device(device)
+            _poll_device(device, monitored_ids)
             # Recompute circuit/bundle state after every device, not once at
             # the end of the whole sweep — otherwise a link that goes down on
             # the very first device polled wouldn't show as down until every
@@ -62,13 +69,32 @@ def poll_all_devices():
         _currently_polling = False
 
 
-def _poll_device(device):
+def _monitored_interface_ids():
+    """Every interface id referenced by some circuit's endpoints — the only
+    ones the regular poll loop touches. Computed once per sweep (or once
+    per manual repoll) rather than per-device since it's the same set
+    throughout a given poll pass."""
+    ids = set()
+    for a, b in db.session.query(Circuit.interface_a_id, Circuit.interface_b_id).all():
+        if a is not None:
+            ids.add(a)
+        if b is not None:
+            ids.add(b)
+    return ids
+
+
+def _poll_device(device, monitored_ids=None):
     device.last_polled_at = datetime.utcnow()
     device.reachable = telemetry.check_reachable(device)
     if not device.reachable:
         return  # interfaces stay at last-known values; circuit state handled via device.reachable check below
 
+    if monitored_ids is None:
+        monitored_ids = _monitored_interface_ids()
+
     for iface in device.interfaces:
+        if iface.id not in monitored_ids:
+            continue  # discovered by a walk, but not wired into any circuit — nothing to poll it for
         try:
             data = telemetry.poll_interface_counters(device, iface)
         except SnmpError as e:

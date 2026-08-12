@@ -1,0 +1,8 @@
+{% macro util_pct(in_bps, out_bps, capacity) -%}
+{%- set peak = [in_bps, out_bps]|select('number')|list -%}
+{%- if capacity and peak -%}
+{{ '%.0f%%'|format(peak|max / capacity * 100) }}
+{%- else -%}
+-
+{%- endif -%}
+{%- endmacro %}

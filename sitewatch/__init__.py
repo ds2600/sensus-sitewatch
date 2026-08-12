@@ -48,6 +48,18 @@ def create_app():
     def inject_app_name():
         return {"app_name": app.config["APP_NAME"]}
 
+    @app.template_filter("bps")
+    def format_bps(value):
+        """Used on the circuits pages for capacity/current-usage display —
+        a 100G circuit reading '100000000000 bps' isn't useful to anyone."""
+        if value is None:
+            return "-"
+        value = float(value)
+        for unit, divisor in (("Tbps", 1e12), ("Gbps", 1e9), ("Mbps", 1e6), ("Kbps", 1e3)):
+            if value >= divisor:
+                return f"{value / divisor:.1f} {unit}"
+        return f"{value:.0f} bps"
+
     # Poller starts only under the real server, not under `flask init-db` etc.
     if os.environ.get("SITEWATCH_RUN_POLLER") == "1":
         from sitewatch.poller import start_poller

@@ -248,12 +248,33 @@ class Circuit(db.Model):
 
     @property
     def effective_capacity_bps(self):
+        """A bundle's capacity is the sum of its members' — 2x100G members
+        make a 200G bundle, even though each member circuit is still
+        individually a 100G link. A leaf circuit's capacity is capped by
+        its slower end, same idea as a cable only running as fast as its
+        weakest link."""
         if self.capacity_bps_override:
             return self.capacity_bps_override
         if self.is_bundle:
             return sum((c.effective_capacity_bps or 0) for c in self.children)
         speeds = [i.if_speed_bps for i in (self.interface_a, self.interface_b) if i and i.if_speed_bps]
         return min(speeds) if speeds else None
+
+    @property
+    def current_in_bps(self):
+        """Current usage — a bundle's is the sum of its members' (a LAG's
+        aggregate throughput is its members' combined), a leaf's is read
+        off interface_a, the same endpoint treated as canonical elsewhere
+        on this model (site_a, etc.)."""
+        if self.is_bundle:
+            return sum((c.current_in_bps or 0) for c in self.children)
+        return self.interface_a.last_in_bps if self.interface_a else None
+
+    @property
+    def current_out_bps(self):
+        if self.is_bundle:
+            return sum((c.current_out_bps or 0) for c in self.children)
+        return self.interface_a.last_out_bps if self.interface_a else None
 
 
 class CircuitStatusHistory(db.Model):

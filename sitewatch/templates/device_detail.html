@@ -24,15 +24,25 @@
           data-job-label="Walking {{ device.hostname }}">Walk now</button>
 </div>
 
+<p class="text-body-secondary small">
+  Discovered by the last walk. Only interfaces wired into a circuit (the "Circuit" column
+  below) are actually polled each cycle — oper/admin status and utilization for everything
+  else here is whatever it was at walk time. See the <a href="{{ url_for('circuits.list_circuits') }}">Circuits</a>
+  page for live status and utilization.
+</p>
 <table class="table table-sm">
-  <thead><tr><th>Index</th><th>Descr</th><th>Alias</th><th>Speed</th><th>Oper</th><th>Admin</th><th>In</th><th>Out</th><th>Util</th></tr></thead>
+  <thead><tr><th>Index</th><th>Descr</th><th>Alias</th><th>Speed</th><th>Oper</th><th>Admin</th><th>Circuit</th></tr></thead>
   <tbody>
     {% for i in device.interfaces %}
     <tr><td>{{ i.if_index }}</td><td>{{ i.if_descr }}</td><td>{{ i.if_alias }}</td>
-        <td>{{ i.if_speed_bps }}</td><td>{{ i.oper_status }}</td><td>{{ i.admin_status }}</td>
-        <td>{{ '%.1f Mbps'|format(i.last_in_bps / 1000000) if i.last_in_bps else '-' }}</td>
-        <td>{{ '%.1f Mbps'|format(i.last_out_bps / 1000000) if i.last_out_bps else '-' }}</td>
-        <td>{{ '%.0f%%'|format(i.last_in_bps / i.if_speed_bps * 100) if i.last_in_bps and i.if_speed_bps else '-' }}</td></tr>
+        <td>{{ i.if_speed_bps | bps }}</td><td>{{ i.oper_status }}</td><td>{{ i.admin_status }}</td>
+        <td>
+          {% if i.id in circuits_by_interface_id %}
+          <a href="{{ url_for('circuits.circuit_detail', circuit_id=circuits_by_interface_id[i.id].id) }}">{{ circuits_by_interface_id[i.id].name }}</a>
+          {% else %}
+          <span class="text-body-secondary">not monitored</span>
+          {% endif %}
+        </td></tr>
     {% endfor %}
   </tbody>
 </table>

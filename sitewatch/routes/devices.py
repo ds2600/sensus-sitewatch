@@ -61,7 +61,17 @@ def add_device():
 @login_required
 def device_detail(device_id):
     device = Device.query.get_or_404(device_id)
-    return render_template("device_detail.html", device=device)
+    iface_ids = [i.id for i in device.interfaces]
+    circuits_by_interface_id = {}
+    if iface_ids:
+        for c in Circuit.query.filter(db.or_(Circuit.interface_a_id.in_(iface_ids),
+                                               Circuit.interface_b_id.in_(iface_ids))).all():
+            if c.interface_a_id in iface_ids:
+                circuits_by_interface_id[c.interface_a_id] = c
+            if c.interface_b_id in iface_ids:
+                circuits_by_interface_id[c.interface_b_id] = c
+    return render_template("device_detail.html", device=device,
+                            circuits_by_interface_id=circuits_by_interface_id)
 
 
 @devices_bp.route("/<int:device_id>/edit", methods=["GET", "POST"])

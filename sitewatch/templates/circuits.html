@@ -1,15 +1,21 @@
 {% extends "base.html" %}
+{% from "_macros.html" import util_pct %}
 {% block content %}
 <a class="btn btn-primary mb-3" href="{{ url_for('circuits.add_circuit') }}">Add circuit</a>
 <table class="table">
-  <thead><tr><th>Name</th><th>Role</th><th>Type</th><th>State</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Role</th><th>Type</th><th>State</th><th>Capacity</th><th>In</th><th>Out</th><th>Util</th><th></th></tr></thead>
   <tbody>
     {% for c in circuits %}
+    {% set capacity = c.effective_capacity_bps %}
     <tr>
       <td><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a></td>
       <td>{{ c.role.name }} ({{ c.role.tier }})</td>
       <td>{{ 'bundle' if c.is_bundle else 'point-to-point' }}</td>
       <td><span class="badge bg-secondary">{{ c.current_state }}</span></td>
+      <td>{{ capacity | bps }}</td>
+      <td>{{ c.current_in_bps | bps }}</td>
+      <td>{{ c.current_out_bps | bps }}</td>
+      <td>{{ util_pct(c.current_in_bps, c.current_out_bps, capacity) }}</td>
       <td><a href="{{ url_for('circuits.edit_circuit', circuit_id=c.id) }}">Edit</a></td>
     </tr>
     {% endfor %}
