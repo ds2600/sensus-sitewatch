@@ -125,6 +125,17 @@ def _recompute_all_circuit_states():
             recompute_bundle_state(bundle)
 
 
+def poll_device_now(device):
+    """Manual single-device repoll — the device detail page's "Repoll" button.
+    Runs the same telemetry + debounce logic as a scheduled pass, just scoped
+    to one device's reachability/interfaces instead of waiting for the next
+    cycle. Circuit/bundle states are recomputed across the board afterward
+    since this device's interfaces may affect circuits touching other sites."""
+    _poll_device(device)
+    _recompute_all_circuit_states()
+    db.session.commit()
+
+
 def start_poller(app):
     with app.app_context():
         interval = Setting.query.get("polling_interval_minutes")

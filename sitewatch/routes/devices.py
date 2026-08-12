@@ -5,6 +5,7 @@ from sitewatch.extensions import db
 from sitewatch.models import Device, Site, Circuit, VENDORS, SNMP_VERSIONS
 from sitewatch.snmp import SnmpError
 from sitewatch.discovery import perform_walk
+from sitewatch.poller import poll_device_now
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
 
@@ -112,4 +113,14 @@ def walk_device(device_id):
 
     db.session.commit()
     flash(f"Walk complete: {count} interfaces found.")
+    return redirect(url_for("devices.device_detail", device_id=device_id))
+
+
+@devices_bp.route("/<int:device_id>/repoll", methods=["POST"])
+@login_required
+def repoll_device(device_id):
+    device = Device.query.get_or_404(device_id)
+    poll_device_now(device)
+    flash(f"Repoll complete — {device.hostname} is now "
+          f"{'reachable' if device.reachable else 'still unreachable'}.")
     return redirect(url_for("devices.device_detail", device_id=device_id))
