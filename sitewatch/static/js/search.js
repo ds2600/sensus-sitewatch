@@ -1,12 +1,14 @@
 // Navbar quick search: debounced fetch to /api/search, results grouped by
-// type in a Bootstrap dropdown-menu. "/" focuses the box from anywhere
-// (unless already typing in a field) so keyboard users never touch the mouse.
+// type in a dropdown-menu panel. Manual show/hide via classList, not
+// Bootstrap's JS dropdown plugin — same reasoning as searchable_select.js:
+// that plugin doesn't play well with a menu whose contents change live as
+// you type. "/" focuses the box from anywhere so keyboard users never touch
+// the mouse.
 (() => {
   const input = document.getElementById("search-input");
   const menu = document.getElementById("search-menu");
   if (!input || !menu) return;
 
-  const dropdown = new bootstrap.Dropdown(input, { autoClose: true });
   let debounceTimer = null;
   let items = [];
   let activeIndex = -1;
@@ -17,6 +19,14 @@
     circuits: (id) => `/circuits/${id}`,
   };
   const labelFor = { sites: "Sites", devices: "Devices", circuits: "Circuits" };
+
+  function open() {
+    menu.classList.add("show");
+  }
+
+  function close() {
+    menu.classList.remove("show");
+  }
 
   function render(data) {
     menu.innerHTML = "";
@@ -45,7 +55,7 @@
       menu.appendChild(li);
     }
     activeIndex = -1;
-    if (!dropdown._element.matches(":focus")) dropdown.show();
+    open();
   }
 
   function setActive(i) {
@@ -61,7 +71,7 @@
     clearTimeout(debounceTimer);
     const q = input.value.trim();
     if (q.length < 2) {
-      dropdown.hide();
+      close();
       return;
     }
     debounceTimer = setTimeout(() => {
@@ -70,6 +80,11 @@
         .then(render);
     }, 200);
   });
+
+  // Real <a href> items, so a click navigates on its own — this just
+  // closes the panel afterward (or when focus leaves for any other
+  // reason). Delayed so the click's navigation still fires first.
+  input.addEventListener("blur", () => setTimeout(close, 150));
 
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") {
@@ -86,7 +101,7 @@
         window.location = items[activeIndex].getAttribute("href");
       }
     } else if (e.key === "Escape") {
-      dropdown.hide();
+      close();
       input.blur();
     }
   });
