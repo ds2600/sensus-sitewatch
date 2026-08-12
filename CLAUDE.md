@@ -59,6 +59,13 @@ stored, from `compute_site_status()`.
 
 ## Conventions
 
+- UI copy (labels, placeholders, form-text hints, flash messages, button
+  text, tooltips) must be short — Simplified Technical English style:
+  plain words, one clause where possible, state the fact/action and stop.
+  No explaining the "why" in-line, no parenthetical asides, no restating
+  what a nearby label already says. This does not apply to job_log.py
+  output or Python logging — those are meant to be detailed/technical,
+  since that's the point of the walk/repoll log modal and server logs.
 - No ORM enum types — status/role/vendor values are plain strings,
   validated in Python. Valid sets are the tuples at the top of `models.py`.
 - Credentials (SNMP community/keys, SSH password) are never stored or
@@ -88,6 +95,24 @@ stored, from `compute_site_status()`.
   `status_history`/`alert_mute` relationships, or `Device.interfaces`) so
   deleting the parent actually cleans up its children rather than leaving
   them dangling.
+
+## End every change with a pull note
+
+The user runs this app on a separate machine from wherever Claude Code is
+editing — they `git pull` to get changes, and re-running `flask --app app
+init-db` unnecessarily means rebuilding/second-guessing their real
+database for no reason. So: the last line of any response that changes
+code must say exactly what to do after `git pull`, e.g.:
+
+- `flask --app app init-db` — only if models.py added/changed a table or
+  column (it's additive/safe, but only run it when actually needed)
+- Nothing — say so explicitly ("No migration or restart needed") rather
+  than omitting the line
+- Anything else non-obvious: a new .env var, a new pip dependency, a
+  process restart because a background thread's state won't pick up the
+  change otherwise, etc.
+
+Don't make the user infer this from the diff — state it plainly every time.
 
 ## Known gaps / not yet built
 

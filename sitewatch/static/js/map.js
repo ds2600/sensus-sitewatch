@@ -43,16 +43,29 @@ function curvedPath(points, magnitude) {
   return path;
 }
 
+// Sizes #map against the actual rendered header height rather than a flat
+// vh guess, which can't know how tall the navbar really is (wrapped nav
+// links on a narrow window, browser chrome, etc). Leaves a little room
+// below for breathing room rather than running edge-to-edge.
+function sizeMapContainer() {
+  const el = document.getElementById("map");
+  const nav = document.querySelector("nav.navbar");
+  const navHeight = nav ? nav.getBoundingClientRect().height : 0;
+  const chrome = navHeight + 64; // container-fluid's top padding + a bit of breathing room below
+  el.style.height = Math.max(300, window.innerHeight - chrome) + "px";
+}
+
 async function loadMap() {
+  sizeMapContainer();
   const map = L.map("map").setView([39.8, -98.6], 4); // CONUS fallback until sites load (or if there are none)
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
-  // #map's height is 95vh (custom.css) so it tracks window resizes on its
-  // own, but Leaflet caches its container size at init and won't redraw
-  // around a CSS-driven size change without being told to.
-  window.addEventListener("resize", () => map.invalidateSize());
+  window.addEventListener("resize", () => {
+    sizeMapContainer();
+    map.invalidateSize();
+  });
 
   const res = await fetch("/api/map");
   const data = await res.json();

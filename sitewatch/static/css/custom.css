@@ -18,11 +18,9 @@
   overflow-y: auto;
 }
 
-/* Dashboard map — dominates the viewport instead of a small fixed box.
-   vh recalculates on its own as the window resizes; Leaflet still needs
-   an explicit invalidateSize() call on resize (see map.js) since it
-   caches the container size at init and won't redraw around a CSS-driven
-   size change on its own. */
+/* Dashboard map — sized precisely in map.js (viewport height minus the
+   actual navbar height, measured at runtime), since a flat vh value
+   can't account for the header. This is just the pre-JS fallback. */
 #map {
-  height: 95vh;
+  height: 70vh;
 }
