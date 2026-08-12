@@ -100,6 +100,30 @@ function startJob(url, label) {
     });
 }
 
+function viewJob(jobId, label) {
+  // Same modal, but for an already-started job (from the Background
+  // activity list) — skip the POST-to-start step and just tail/show its
+  // log from the top. Works whether the job already finished (shows the
+  // full log immediately, Close enabled right away) or is still running.
+  const modalEl = jobModalEl();
+  const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+  document.getElementById("job-log-title").textContent = label || "Activity";
+  document.getElementById("job-log-lines").textContent = "";
+  document.getElementById("job-log-status").textContent = "Loading…";
+  document.getElementById("job-log-status").className = "me-auto";
+  document.getElementById("job-log-close-btn").disabled = true;
+  document.getElementById("job-log-close-x").style.display = "none";
+  jobRedirectUrl = null;
+  jobStartedAt = Date.now();
+  updateElapsed();
+  clearInterval(jobElapsedTimer);
+  jobElapsedTimer = setInterval(updateElapsed, 200);
+  bsModal.show();
+
+  pollJobLog(jobId, 0);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const closeAndReload = () => {
     clearTimeout(jobPollTimer);

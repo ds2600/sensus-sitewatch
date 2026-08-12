@@ -27,7 +27,7 @@ def index():
         new_interval = request.form.get("polling_interval_minutes")
         if new_interval and new_interval != old_interval:
             reschedule_poller(int(new_interval))
-            flash(f"Polling interval changed to every {new_interval} minute(s) — takes effect immediately.")
+            flash("Settings saved.")
         return redirect(url_for("settings.index"))
     values = {k: Setting.get(k) for k in Setting.DEFAULTS}
     poll_stats = {
@@ -45,7 +45,7 @@ def poller_start():
         resume_poller()
         flash("Poller started.")
     else:
-        flash("This process was started without SITEWATCH_RUN_POLLER=1, so there's no poller here to start.")
+        flash("Poller not running in this process.")
     return redirect(url_for("settings.index"))
 
 
@@ -56,7 +56,7 @@ def poller_stop():
         pause_poller()
         flash("Poller stopped.")
     else:
-        flash("This process was started without SITEWATCH_RUN_POLLER=1, so there's no poller here to stop.")
+        flash("Poller not running in this process.")
     return redirect(url_for("settings.index"))
 
 

@@ -1,22 +1,25 @@
-"""In-memory log capture for one-off background jobs (device walk/repoll)
-triggered from the UI, so the browser can tail real progress in a modal
-instead of just spinning until a redirect. Not a task queue — jobs run on a
-plain daemon thread and this module only exists to buffer the log lines
-that thread produces, keyed by a job id, for the browser to poll.
+"""In-memory log capture for background jobs — both the scheduled poll
+cycle and one-off UI-triggered jobs (device walk/repoll) — so the browser
+can watch real progress instead of just spinning until a redirect, and so
+there's a place to look at what the background poller has actually been
+doing (Settings page's "Background activity" list).
 
 Jobs are kept in memory only (no DB, no persistence across restarts) and
-pruned after a few minutes — this is "tail what's happening right now",
-not an audit log. CircuitStatusHistory/AlertMute already cover the durable
-record of what a poll found.
+capped by count, oldest evicted first — this is "recent activity", not an
+audit log. CircuitStatusHistory/AlertMute already cover the durable record
+of what a poll found.
 """
 import logging
 import threading
 import time
 import uuid
 from collections import deque
+from datetime import datetime
 
-_JOB_TTL_SECONDS = 300
+_MAX_JOBS = 300
 _MAX_LINES_PER_JOB = 2000
+
+log = logging.getLogger(__name__)
 
 _jobs = {}
 _lock = threading.Lock()
@@ -53,15 +56,10 @@ def install():
         sitewatch_logger.setLevel(logging.INFO)
 
 
-def _prune_expired():
-    cutoff = time.time() - _JOB_TTL_SECONDS
-    for job_id in [jid for jid, j in _jobs.items() if j["finished_at"] and j["finished_at"] < cutoff]:
-        del _jobs[job_id]
-
-
 def start_job(label):
     with _lock:
-        _prune_expired()
+        while len(_jobs) >= _MAX_JOBS:
+            _jobs.pop(next(iter(_jobs)))
         job_id = uuid.uuid4().hex
         _jobs[job_id] = {
             "label": label,
@@ -78,7 +76,8 @@ def start_job(label):
 def run_job(job_id, fn, app):
     """Runs fn() (no args) on the calling thread with app context pushed and
     this thread's log records routed into job_id's buffer. Call this as a
-    thread's target — it's synchronous/blocking by design."""
+    thread's target for UI-triggered jobs, or directly for the scheduled
+    poll job (which already runs on APScheduler's own background thread)."""
     _current_job_id.value = job_id
     try:
         with app.app_context():
@@ -86,7 +85,7 @@ def run_job(job_id, fn, app):
                 fn()
                 _finish(job_id, success=True)
             except Exception as e:
-                _append(job_id, f"ERROR: {e}")
+                log.exception("Background job failed")
                 _finish(job_id, success=False, error=str(e))
     finally:
         _current_job_id.value = None
@@ -123,3 +122,21 @@ def get_job(job_id, since=0):
             "error": job["error"],
             "elapsed": round(elapsed, 1),
         }
+
+
+def list_jobs(limit=30):
+    """Newest-first summaries for the Settings page's activity list — no
+    log lines, just enough to show what ran, when, and how it went."""
+    with _lock:
+        items = list(_jobs.items())[-limit:][::-1]
+        return [
+            {
+                "id": job_id,
+                "label": job["label"],
+                "started_at": datetime.utcfromtimestamp(job["started_at"]).isoformat(),
+                "done": job["done"],
+                "success": job["success"],
+                "elapsed": round((job["finished_at"] or time.time()) - job["started_at"], 1),
+            }
+            for job_id, job in items
+        ]

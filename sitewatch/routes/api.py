@@ -31,22 +31,29 @@ def map_data():
     return jsonify({"sites": sites, "lines": lines})
 
 
-@api_bp.route("/alerts")
+@api_bp.route("/status")
 @login_required
-def alerts():
+def status():
+    """Single poll target for the header: alert count/list + poller state,
+    so the browser makes one background request instead of two."""
     down = CircuitStatusHistory.query.join(Circuit).filter(CircuitStatusHistory.cleared_at.is_(None)).all()
     unmuted = [h for h in down if not AlertMute.is_muted(h.circuit_id)]
     return jsonify({
-        "count": len(unmuted),
-        "circuits": [{"id": h.circuit_id, "name": h.circuit.name, "since": h.started_at.isoformat()}
-                     for h in unmuted],
+        "alerts": {
+            "count": len(unmuted),
+            "circuits": [{"id": h.circuit_id, "name": h.circuit.name, "since": h.started_at.isoformat()}
+                         for h in unmuted],
+        },
+        "poller": get_poller_status(),
     })
 
 
-@api_bp.route("/poller-status")
+@api_bp.route("/jobs")
 @login_required
-def poller_status():
-    return jsonify(get_poller_status())
+def jobs():
+    """Recent background activity (poll cycles, manual walk/repoll) for the
+    Settings page's activity list."""
+    return jsonify({"jobs": job_log.list_jobs()})
 
 
 @api_bp.route("/jobs/<job_id>/log")

@@ -6,15 +6,13 @@
     <input class="form-control" name="polling_interval_minutes" value="{{ values.polling_interval_minutes }}">
     <div class="form-text">
       {% if poll_stats.finished_at %}
-      Last poll cycle took {{ poll_stats.duration }}s, finished {{ poll_stats.finished_at }} UTC.
+      Last cycle: {{ poll_stats.duration }}s, finished {{ poll_stats.finished_at }} UTC.
       {% if poll_stats.duration|float >= (values.polling_interval_minutes|float * 60) %}
-      <span class="text-danger">That's at or past the configured interval — cycles may be overlapping or falling behind.</span>
+      <span class="text-danger">At/past the configured interval — cycles may be running behind.</span>
       {% endif %}
       {% else %}
-      No poll cycle has completed yet.
+      No poll cycle yet.
       {% endif %}
-      Poller is currently <strong>{{ poller_status.label|lower }}</strong>.
-      <span id="settings-poller-next-run" data-next-run="{{ poller_status.next_run_at or '' }}"></span>
     </div>
   </div>
   <div class="mb-3"><label class="form-label">Down threshold (consecutive failed polls)</label>
@@ -29,30 +27,32 @@
 </form>
 
 <h5 id="poller">Poller</h5>
-<div class="col-md-6 mb-5">
+<div class="col-md-6 mb-4">
   <p class="mb-1">
-    Status:
-    <span class="badge {{ 'bg-success' if poller_status.active else 'bg-danger' }}">{{ poller_status.label }}</span>
-    {% if poller_status.interval_minutes %}
-    <span class="text-body-secondary">— every {{ poller_status.interval_minutes }} minute(s)</span>
-    {% endif %}
+    <span id="poller-status-badge" class="badge {{ 'bg-success' if poller_status.active else 'bg-danger' }}">{{ poller_status.label }}</span>
+    {% if poller_status.interval_minutes %}<span class="text-body-secondary">every {{ poller_status.interval_minutes }} min</span>{% endif %}
   </p>
-  <p class="mb-2" id="poller-next-run" data-next-run="{{ poller_status.next_run_at or '' }}"></p>
+  <p class="mb-2 small text-body-secondary" id="poller-next-run" data-next-run="{{ poller_status.next_run_at or '' }}"></p>
   {% if poller_status.state == 'disabled' %}
-  <div class="form-text">
-    This process was started without <code>SITEWATCH_RUN_POLLER=1</code>, so there's
-    no poller running here to start or stop. See README.md section 2–3.
-  </div>
+  <div class="form-text">Not running in this process (SITEWATCH_RUN_POLLER not set).</div>
   {% else %}
   <div class="d-flex gap-2">
     <form method="post" action="{{ url_for('settings.poller_start') }}">
-      <button class="btn btn-success btn-sm" {{ 'disabled' if poller_status.active }}>Start polling</button>
+      <button class="btn btn-success btn-sm" data-poller-toggle="start" {{ 'disabled' if poller_status.active }}>Start</button>
     </form>
     <form method="post" action="{{ url_for('settings.poller_stop') }}">
-      <button class="btn btn-danger btn-sm" {{ 'disabled' if not poller_status.active }}>Stop polling</button>
+      <button class="btn btn-danger btn-sm" data-poller-toggle="stop" {{ 'disabled' if not poller_status.active }}>Stop</button>
     </form>
   </div>
   {% endif %}
+</div>
+
+<h5>Background activity</h5>
+<div class="col-md-8 mb-5">
+  <table class="table table-sm">
+    <thead><tr><th>Activity</th><th>Status</th><th>Started</th><th>Duration</th><th></th></tr></thead>
+    <tbody id="activity-rows"><tr><td colspan="5" class="text-body-secondary">Loading&hellip;</td></tr></tbody>
+  </table>
 </div>
 
 <h5>Circuit roles</h5>

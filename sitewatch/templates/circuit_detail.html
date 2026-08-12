@@ -15,11 +15,9 @@
 
 <h5>Utilization</h5>
 {% set capacity = circuit.effective_capacity_bps %}
-<p>
-  {{ circuit.current_in_bps | bps }} in / {{ circuit.current_out_bps | bps }} out
-  out of {{ capacity | bps }} capacity
-  ({{ util_pct(circuit.current_in_bps, circuit.current_out_bps, capacity) }})
-  {% if circuit.is_bundle %}<span class="text-body-secondary small">— sum of member circuits below</span>{% endif %}
+<p class="mb-4">
+  In {{ circuit.current_in_bps | bps }} / Out {{ circuit.current_out_bps | bps }} /
+  Capacity {{ capacity | bps }} / {{ util_pct(circuit.current_in_bps, circuit.current_out_bps, capacity) }}
 </p>
 
 {% if circuit.is_bundle %}

@@ -36,6 +36,7 @@ _OID_NAMES = {
     "1.3.6.1.2.1.2.2.1.2": "ifDescr",
     "1.3.6.1.2.1.31.1.1.1.18": "ifAlias",
     "1.3.6.1.2.1.2.2.1.5": "ifSpeed",
+    "1.3.6.1.2.1.31.1.1.1.15": "ifHighSpeed",
     "1.3.6.1.2.1.2.2.1.8": "ifOperStatus",
     "1.3.6.1.2.1.2.2.1.7": "ifAdminStatus",
     "1.3.6.1.2.1.31.1.1.1.6": "ifHCInOctets",
@@ -53,6 +54,11 @@ OID_SYS_UPTIME = "1.3.6.1.2.1.1.3.0"
 OID_IF_DESCR = "1.3.6.1.2.1.2.2.1.2"
 OID_IF_ALIAS = "1.3.6.1.2.1.31.1.1.1.18"
 OID_IF_SPEED = "1.3.6.1.2.1.2.2.1.5"
+# ifSpeed is a 32-bit gauge in bps — RFC 2863 caps it at 4,294,967,295, so it
+# silently misreports anything 10G and up (some vendors clamp to the max,
+# others wrap). ifHighSpeed is the fix: same idea but in Mbps, ranges up to
+# ~4.29 billion Mbps. Walk both, prefer ifHighSpeed when a device has it.
+OID_IF_HIGH_SPEED = "1.3.6.1.2.1.31.1.1.1.15"
 OID_IF_OPER_STATUS = "1.3.6.1.2.1.2.2.1.8"
 OID_IF_ADMIN_STATUS = "1.3.6.1.2.1.2.2.1.7"
 OID_IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
@@ -157,15 +163,22 @@ def walk_interfaces(device):
     descr = dict(snmp_walk(device, OID_IF_DESCR))
     alias = dict(snmp_walk(device, OID_IF_ALIAS))
     speed = dict(snmp_walk(device, OID_IF_SPEED))
+    high_speed = dict(snmp_walk(device, OID_IF_HIGH_SPEED))
     oper = dict(snmp_walk(device, OID_IF_OPER_STATUS))
     admin = dict(snmp_walk(device, OID_IF_ADMIN_STATUS))
 
     out = {}
     for idx, val in descr.items():
+        if idx in high_speed and int(high_speed[idx]) > 0:
+            if_speed_bps = int(high_speed[idx]) * 1_000_000  # ifHighSpeed is in Mbps
+        elif idx in speed:
+            if_speed_bps = int(speed[idx])
+        else:
+            if_speed_bps = None
         out[idx] = {
             "if_descr": str(val),
             "if_alias": str(alias.get(idx, "")),
-            "if_speed_bps": int(speed[idx]) if idx in speed else None,
+            "if_speed_bps": if_speed_bps,
             "oper_status": "up" if str(oper.get(idx)) == "1" else "down",
             "admin_status": "up" if str(admin.get(idx)) == "1" else "down",
         }

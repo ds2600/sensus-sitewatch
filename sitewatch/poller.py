@@ -23,6 +23,7 @@ from sitewatch import telemetry
 from sitewatch.snmp import SnmpError
 from sitewatch.status import recompute_bundle_state, rollup_degree_status
 from sitewatch.integrations.webhook_payload import send_down_alert
+from sitewatch import job_log
 
 log = logging.getLogger(__name__)
 
@@ -211,11 +212,8 @@ def start_poller(app):
         enabled = Setting.get("poller_enabled", "1") != "0"
 
     def job():
-        with app.app_context():
-            try:
-                poll_all_devices()
-            except Exception:
-                log.exception("Poll cycle failed")
+        job_id = job_log.start_job("Poll cycle")
+        job_log.run_job(job_id, poll_all_devices, app)
 
     scheduler.add_job(job, "interval", minutes=minutes, id=POLLER_JOB_ID, replace_existing=True)
     scheduler.start()
