@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
 {% block content %}
+{{ breadcrumb([("Settings", url_for('settings.index')), ("Background activity", none)]) }}
 <h4>Background activity</h4>
 <p class="text-body-secondary small">Poll cycles and manual walk/repolls. Newest first.</p>
 <div style="max-height: 75vh; overflow-y: auto;">

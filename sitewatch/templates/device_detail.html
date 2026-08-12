@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
 {% block content %}
+{{ breadcrumb([("Sites", url_for('sites.list_sites')), (device.site.name, url_for('sites.site_detail', site_id=device.site_id)), (device.hostname, none)]) }}
 <div class="d-flex align-items-center gap-2">
   <h4 class="mb-0">{{ device.hostname }} — {{ device.mgmt_ip }}</h4>
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('devices.edit_device', device_id=device.id) }}">Edit</a>

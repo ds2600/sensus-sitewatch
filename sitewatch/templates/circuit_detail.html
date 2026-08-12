@@ -1,6 +1,11 @@
 {% extends "base.html" %}
-{% from "_macros.html" import util_pct %}
+{% from "_macros.html" import util_pct, breadcrumb %}
 {% block content %}
+{% set crumbs = [("Circuits", url_for('circuits.list_circuits'))] %}
+{% if circuit.parent %}
+{% set crumbs = crumbs + [(circuit.parent.name, url_for('circuits.circuit_detail', circuit_id=circuit.parent.id))] %}
+{% endif %}
+{{ breadcrumb(crumbs + [(circuit.name, none)]) }}
 <div class="d-flex align-items-center gap-2">
   <h4 class="mb-0">{{ circuit.name }}</h4>
   <span class="badge bg-secondary">{{ circuit.current_state }}</span>

@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
 {% block content %}
+{{ breadcrumb([("Sites", url_for('sites.list_sites')), ('Edit ' ~ site.name if site else 'Add site', none)]) }}
 <h4>{{ 'Edit site' if site else 'Add site' }}</h4>
 <form method="post" class="col-md-4">
   <div class="mb-3"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ site.name if site else '' }}" required></div>

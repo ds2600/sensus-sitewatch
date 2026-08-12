@@ -33,3 +33,20 @@
   height: 45vh;
   border: 4px solid #fd7e14;
 }
+
+/* Whole-row-clickable tables (clickable_rows.js) — visual affordance that
+   the row itself, not just the name link inside it, does something. */
+tr[data-href] {
+  cursor: pointer;
+}
+tr[data-href]:hover {
+  background-color: var(--bs-tertiary-bg);
+}
+
+/* Navbar quick search (search.js) */
+#search-menu {
+  min-width: 20rem;
+}
+#search-menu .dropdown-header {
+  padding-top: 0.5rem;
+}

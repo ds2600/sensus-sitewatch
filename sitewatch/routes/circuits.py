@@ -80,7 +80,9 @@ def _set_lag_interfaces(circuit, form):
 @circuits_bp.route("/")
 @login_required
 def list_circuits():
-    return render_template("circuits.html", circuits=Circuit.query.filter_by(parent_circuit_id=None).all())
+    circuits = Circuit.query.filter_by(parent_circuit_id=None).all()
+    muted_ids = {c.id for c in circuits if AlertMute.is_muted(c.id)}
+    return render_template("circuits.html", circuits=circuits, muted_ids=muted_ids)
 
 
 @circuits_bp.route("/add", methods=["GET", "POST"])

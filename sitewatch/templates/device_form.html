@@ -1,8 +1,13 @@
 {% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
 {% block content %}
+{% set effective_site_id = device.site_id if device else preselected_site_id %}
+{% set effective_site = (sites | selectattr('id', 'equalto', effective_site_id) | first) if effective_site_id else none %}
+{% set crumbs = [("Sites", url_for('sites.list_sites'))] %}
+{% if effective_site %}{% set crumbs = crumbs + [(effective_site.name, url_for('sites.site_detail', site_id=effective_site.id))] %}{% endif %}
+{{ breadcrumb(crumbs + [('Edit ' ~ device.hostname if device else 'Add device', none)]) }}
 <h4>{{ 'Edit device' if device else 'Add device' }}</h4>
 <form method="post" class="col-md-6">
-  {% set effective_site_id = device.site_id if device else preselected_site_id %}
   <div class="mb-3"><label class="form-label">Site</label>
     <select class="form-select" name="site_id" required>
       {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if effective_site_id==s.id }}>{{ s.name }}</option>{% endfor %}

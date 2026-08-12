@@ -6,3 +6,18 @@
 -
 {%- endif -%}
 {%- endmacro %}
+
+{# items: list of (label, url_or_none) tuples; url None marks the current page #}
+{% macro breadcrumb(items) %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    {% for label, url in items %}
+    {% if url %}
+    <li class="breadcrumb-item"><a href="{{ url }}">{{ label }}</a></li>
+    {% else %}
+    <li class="breadcrumb-item active" aria-current="page">{{ label }}</li>
+    {% endif %}
+    {% endfor %}
+  </ol>
+</nav>
+{% endmacro %}

@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 <a class="btn btn-primary mb-3" href="{{ url_for('devices.add_device') }}">Add device</a>
+{% if not devices %}
+<p class="text-body-secondary">No devices yet. <a href="{{ url_for('devices.add_device') }}">Add the first one</a>.</p>
+{% else %}
 <table class="table">
   <thead><tr><th>Hostname</th><th>Site</th><th>Vendor</th><th>Reachable</th><th></th></tr></thead>
   <tbody>
     {% for d in devices %}
-    <tr>
+    <tr data-href="{{ url_for('devices.device_detail', device_id=d.id) }}">
       <td>
         <a href="{{ url_for('devices.device_detail', device_id=d.id) }}">{{ d.hostname }}</a>
         <a href="{{ url_for('devices.edit_device', device_id=d.id) }}" class="text-body-secondary small ms-1">edit</a>
@@ -21,4 +24,5 @@
     {% endfor %}
   </tbody>
 </table>
+{% endif %}
 {% endblock %}

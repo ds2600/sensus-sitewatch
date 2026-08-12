@@ -2,7 +2,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required
 
-from sitewatch.models import Site, Circuit, CircuitStatusHistory, AlertMute
+from sitewatch.models import Site, Device, Circuit, CircuitStatusHistory, AlertMute
 from sitewatch.status import compute_site_status
 from sitewatch.poller import get_poller_status
 from sitewatch import job_log
@@ -49,6 +49,25 @@ def status():
                          for h in unmuted],
         },
         "poller": get_poller_status(),
+    })
+
+
+@api_bp.route("/search")
+@login_required
+def search():
+    """Navbar quick search — substring match across sites/devices/circuits,
+    grouped and capped per type so the dropdown stays short."""
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify({"sites": [], "devices": [], "circuits": []})
+    like = f"%{q}%"
+    sites = Site.query.filter(Site.name.ilike(like)).order_by(Site.name).limit(5).all()
+    devices = Device.query.filter(Device.hostname.ilike(like)).order_by(Device.hostname).limit(5).all()
+    circuits = Circuit.query.filter(Circuit.name.ilike(like)).order_by(Circuit.name).limit(5).all()
+    return jsonify({
+        "sites": [{"id": s.id, "label": s.name} for s in sites],
+        "devices": [{"id": d.id, "label": d.hostname} for d in devices],
+        "circuits": [{"id": c.id, "label": c.name} for c in circuits],
     })
 
 

@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
 {% block content %}
+{{ breadcrumb([("Sites", url_for('sites.list_sites')), (site.name, none)]) }}
 <div class="d-flex align-items-center gap-2">
   <h4 class="mb-0">{{ site.name }}</h4>
   <span class="badge bg-{{ 'success' if status=='green' else ('warning' if status=='yellow' else ('primary' if status=='blue' else ('dark' if status=='passthrough' else 'danger'))) }}">{{ status }}</span>

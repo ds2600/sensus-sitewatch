@@ -1,5 +1,11 @@
 {% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
 {% block content %}
+{% set effective_parent_id_bc = circuit.parent_circuit_id if circuit else preselected_parent_id %}
+{% set effective_parent_bc = (bundles_for_form | selectattr('id', 'equalto', effective_parent_id_bc) | first) if effective_parent_id_bc else none %}
+{% set crumbs = [("Circuits", url_for('circuits.list_circuits'))] %}
+{% if effective_parent_bc %}{% set crumbs = crumbs + [(effective_parent_bc.label, url_for('circuits.circuit_detail', circuit_id=effective_parent_bc.id))] %}{% endif %}
+{{ breadcrumb(crumbs + [('Edit ' ~ circuit.name if circuit else 'Add circuit', none)]) }}
 <h4>{{ 'Edit circuit' if circuit else 'Add circuit' }}</h4>
 <form method="post" class="col-md-6">
   <div class="mb-3"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ circuit.name if circuit else '' }}" required></div>

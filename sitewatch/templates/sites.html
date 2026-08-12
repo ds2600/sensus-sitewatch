@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 <a class="btn btn-primary mb-3" href="{{ url_for('sites.add_site') }}">Add site</a>
+{% if not sites %}
+<p class="text-body-secondary">No sites yet. <a href="{{ url_for('sites.add_site') }}">Add the first one</a>.</p>
+{% else %}
 <table class="table">
   <thead><tr><th>Name</th><th>Status</th><th>Source</th></tr></thead>
   <tbody>
     {% for s in sites %}
-    <tr>
+    <tr data-href="{{ url_for('sites.site_detail', site_id=s.id) }}">
       <td>
         <a href="{{ url_for('sites.site_detail', site_id=s.id) }}">{{ s.name }}</a>
         <a href="{{ url_for('sites.edit_site', site_id=s.id) }}" class="text-body-secondary small ms-1">edit</a>
@@ -16,4 +19,5 @@
     {% endfor %}
   </tbody>
 </table>
+{% endif %}
 {% endblock %}

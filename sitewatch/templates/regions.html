@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
 {% block content %}
+{{ breadcrumb([("Settings", url_for('settings.index')), ("Manage regions", none)]) }}
 <div class="d-flex align-items-center gap-2 mb-2">
   <h4 class="mb-0">Manage regions</h4>
   <button type="button" class="btn btn-primary btn-sm" id="save_region_btn">Save current view as region</button>
