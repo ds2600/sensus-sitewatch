@@ -1,0 +1,45 @@
+<div class="form-text mt-0 mb-2">
+  Optional. The bundle's own port-channel/LAG interface at each end — polled alongside the
+  members. A hard failure here (down/unreachable) overrides the member rollup; otherwise members
+  still drive degraded/up.
+</div>
+<div class="row">
+  <div class="col-6">
+    <div class="mb-3"><label class="form-label">LAG interface A — device</label>
+      <div class="dropdown">
+        <input class="form-control" id="device_lag_a_search" placeholder="Search device…" autocomplete="off"
+               value="{{ circuit.lag_interface_a.device.hostname ~ ' (' ~ circuit.lag_interface_a.device.site.name ~ ')' if circuit and circuit.lag_interface_a }}">
+        <ul class="dropdown-menu search-menu w-100" id="device_lag_a_menu"></ul>
+      </div>
+    </div>
+    <div class="mb-3"><label class="form-label">LAG interface A — interface</label>
+      <div class="dropdown">
+        <input class="form-control" id="interface_lag_a_search" placeholder="Pick a device first" autocomplete="off"
+               value="{{ (circuit.lag_interface_a.if_descr or 'ifIndex ' ~ circuit.lag_interface_a.if_index) if circuit and circuit.lag_interface_a }}"
+               {{ 'disabled' if not (circuit and circuit.lag_interface_a) }}>
+        <ul class="dropdown-menu search-menu w-100" id="interface_lag_a_menu"></ul>
+      </div>
+      <input type="hidden" name="lag_interface_a_id" id="interface_lag_a_id"
+             value="{{ circuit.lag_interface_a_id if circuit and circuit.lag_interface_a_id else '' }}">
+    </div>
+  </div>
+  <div class="col-6">
+    <div class="mb-3"><label class="form-label">LAG interface B — device</label>
+      <div class="dropdown">
+        <input class="form-control" id="device_lag_b_search" placeholder="Search device…" autocomplete="off"
+               value="{{ circuit.lag_interface_b.device.hostname ~ ' (' ~ circuit.lag_interface_b.device.site.name ~ ')' if circuit and circuit.lag_interface_b }}">
+        <ul class="dropdown-menu search-menu w-100" id="device_lag_b_menu"></ul>
+      </div>
+    </div>
+    <div class="mb-3"><label class="form-label">LAG interface B — interface</label>
+      <div class="dropdown">
+        <input class="form-control" id="interface_lag_b_search" placeholder="Pick a device first" autocomplete="off"
+               value="{{ (circuit.lag_interface_b.if_descr or 'ifIndex ' ~ circuit.lag_interface_b.if_index) if circuit and circuit.lag_interface_b }}"
+               {{ 'disabled' if not (circuit and circuit.lag_interface_b) }}>
+        <ul class="dropdown-menu search-menu w-100" id="interface_lag_b_menu"></ul>
+      </div>
+      <input type="hidden" name="lag_interface_b_id" id="interface_lag_b_id"
+             value="{{ circuit.lag_interface_b_id if circuit and circuit.lag_interface_b_id else '' }}">
+    </div>
+  </div>
+</div>

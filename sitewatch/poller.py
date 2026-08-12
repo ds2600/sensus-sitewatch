@@ -74,13 +74,16 @@ def _monitored_interface_ids():
     """Every interface id referenced by some circuit's endpoints — the only
     ones the regular poll loop touches. Computed once per sweep (or once
     per manual repoll) rather than per-device since it's the same set
-    throughout a given poll pass."""
+    throughout a given poll pass. Includes bundles' optional LAG interfaces
+    (lag_interface_a/b) alongside regular leaf endpoints — same 4-GET poll,
+    no special-casing needed in _poll_device."""
     ids = set()
-    for a, b in db.session.query(Circuit.interface_a_id, Circuit.interface_b_id).all():
-        if a is not None:
-            ids.add(a)
-        if b is not None:
-            ids.add(b)
+    columns = (Circuit.interface_a_id, Circuit.interface_b_id,
+               Circuit.lag_interface_a_id, Circuit.lag_interface_b_id)
+    for row in db.session.query(*columns).all():
+        for iface_id in row:
+            if iface_id is not None:
+                ids.add(iface_id)
     return ids
 
 
@@ -118,12 +121,8 @@ def _poll_device(device, monitored_ids=None):
         iface.last_polled_at = now
 
 
-def _leaf_target_state(circuit):
-    """What state a leaf circuit's raw telemetry says right now, before
-    debounce is applied."""
-    ifaces = [circuit.interface_a, circuit.interface_b]
+def _interface_pair_target_state(ifaces):
     devices = [i.device for i in ifaces]
-
     if any(not d.reachable for d in devices):
         return "unreachable"
     if any(i.admin_status == "down" for i in ifaces):
@@ -131,6 +130,23 @@ def _leaf_target_state(circuit):
     if any(i.oper_status == "down" for i in ifaces):
         return "down"
     return "up"
+
+
+def _leaf_target_state(circuit):
+    """What state a leaf circuit's raw telemetry says right now, before
+    debounce is applied."""
+    return _interface_pair_target_state([circuit.interface_a, circuit.interface_b])
+
+
+def _lag_target_state(circuit):
+    """Same idea as _leaf_target_state, but for a bundle's own optional
+    LAG/port-channel interface pair (Circuit.lag_interface_a/b) rather than
+    a leaf's endpoints. Returns None if the bundle doesn't have one
+    configured — recompute_bundle_state then falls back to pure
+    member-based rollup, exactly like before this existed."""
+    if not circuit.lag_interface_a_id or not circuit.lag_interface_b_id:
+        return None
+    return _interface_pair_target_state([circuit.lag_interface_a, circuit.lag_interface_b])
 
 
 def _apply_debounce(circuit, target_state):
@@ -185,10 +201,14 @@ def _recompute_all_circuit_states():
         _apply_debounce(circuit, target)
 
     bundles = [c for c in Circuit.query.all() if c.is_bundle]
+    # lag_state only depends on the bundle's own interfaces (device
+    # reachability + oper/admin status), never on other bundles, so it's
+    # safe to compute once up front rather than inside the multi-pass loop.
+    lag_states = {bundle.id: _lag_target_state(bundle) for bundle in bundles}
     # Multiple passes handle bundles-of-bundles without needing a full topo sort.
     for _ in range(3):
         for bundle in bundles:
-            recompute_bundle_state(bundle)
+            recompute_bundle_state(bundle, lag_state=lag_states[bundle.id])
 
 
 def poll_device_now(device):

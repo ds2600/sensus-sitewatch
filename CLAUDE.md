@@ -114,6 +114,26 @@ code must say exactly what to do after `git pull`, e.g.:
 
 Don't make the user infer this from the diff — state it plainly every time.
 
+## Schema changes must keep old backups importable
+
+The user is fine re-running `flask --app app init-db` after a schema
+change (fresh, empty DB) — what they will not tolerate is having to
+manually re-enter sites/devices/circuits afterward. The deal: any backup
+exported before your change must still import cleanly after it. In
+practice:
+
+- New `Circuit`/`Device`/etc. columns must be nullable (or have a safe
+  default) and read via `data[...].get("new_field")` in `backup.py`'s
+  `_load()`, never `data[...]["new_field"]` — an old export simply won't
+  have the key, and that must not be an error.
+- Don't add anything to `REQUIRED_KEYS` or bump `backup.VERSION` for an
+  additive change — that's what breaks old exports on purpose. Only bump
+  `VERSION` for a genuinely incompatible change, and even then prefer
+  handling both shapes in `_load()` over breaking old files outright.
+- When a change does add a schema field, say so in the end-of-response
+  pull note (see below): `flask --app app init-db`, then re-import the
+  latest backup export — don't make the user re-enter data by hand.
+
 ## Known gaps / not yet built
 
 - No automated test suite exists yet — verification so far has been manual

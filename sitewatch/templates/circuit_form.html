@@ -25,9 +25,14 @@
     <script id="bundles-data" type="application/json">{{ bundles_for_form | tojson }}</script>
   </div>
 
+  <script id="devices-data" type="application/json">{{ devices_for_form | tojson }}</script>
+  <script id="interfaces-by-device-data" type="application/json">{{ interfaces_by_device | tojson }}</script>
+
   {% if not circuit %}
   <div class="form-check mb-3">
-    <input class="form-check-input" type="checkbox" name="is_bundle" id="is_bundle" onchange="document.getElementById('leaf-fields').classList.toggle('d-none', this.checked)">
+    <input class="form-check-input" type="checkbox" name="is_bundle" id="is_bundle"
+           onchange="document.getElementById('leaf-fields').classList.toggle('d-none', this.checked);
+                     document.getElementById('bundle-fields').classList.toggle('d-none', !this.checked);">
     <label class="form-check-label" for="is_bundle">Bundle (no interfaces of its own)</label>
   </div>
   <div id="leaf-fields">
@@ -63,9 +68,9 @@
         </div>
       </div>
     </div>
-
-    <script id="devices-data" type="application/json">{{ devices_for_form | tojson }}</script>
-    <script id="interfaces-by-device-data" type="application/json">{{ interfaces_by_device | tojson }}</script>
+  </div>
+  <div id="bundle-fields" class="d-none">
+    {% include "_lag_interface_fields.html" %}
   </div>
   {% else %}
   <p class="text-muted small">
@@ -75,6 +80,9 @@
                (delete and recreate to change endpoints)
     {% endif %}
   </p>
+  {% if circuit.is_bundle %}
+  {% include "_lag_interface_fields.html" %}
+  {% endif %}
   {% endif %}
 
   <div class="mb-3"><label class="form-label">Capacity override (bps, optional)</label>

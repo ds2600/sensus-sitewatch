@@ -5,6 +5,7 @@ from flask.cli import with_appcontext
 from sitewatch import create_app
 from sitewatch.extensions import db
 from sitewatch.models import User, Setting
+from sitewatch.schema_sync import sync_schema
 
 app = create_app()
 
@@ -12,8 +13,12 @@ app = create_app()
 @app.cli.command("init-db")
 @with_appcontext
 def init_db():
-    """Create schema and seed the admin user + default settings."""
-    db.create_all()
+    """Create/update schema and seed the admin user + default settings.
+    Safe to re-run any time — sync_schema() only ever adds what's missing,
+    never touches existing tables/columns/data (create_app() already runs
+    this on every startup too; this is the explicit, visible version of
+    the same thing)."""
+    sync_schema(db)
 
     admin_user = os.environ.get("ADMIN_USERNAME", "admin")
     admin_pass = os.environ.get("ADMIN_PASSWORD")

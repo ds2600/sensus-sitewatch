@@ -60,6 +60,19 @@ def create_app():
                 return f"{value / divisor:.1f} {unit}"
         return f"{value:.0f} bps"
 
+    # Self-healing schema: db.create_all() (what `flask init-db` runs) only
+    # creates missing TABLES, it silently does nothing for a table that
+    # already exists even if the model gained new columns since — so a
+    # routine additive schema change needs this to actually land without
+    # the user having to hand-run ALTER TABLE or wipe/reimport the DB. Must
+    # run after every model class above has actually been imported (blueprint
+    # imports above pull in models.py) — db.metadata is empty, and this a
+    # silent no-op, otherwise. Runs on every app start; cheap and a no-op
+    # once the schema's already caught up.
+    from sitewatch.schema_sync import sync_schema
+    with app.app_context():
+        sync_schema(db)
+
     # Poller starts only under the real server, not under `flask init-db` etc.
     if os.environ.get("SITEWATCH_RUN_POLLER") == "1":
         from sitewatch.poller import start_poller

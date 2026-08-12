@@ -195,6 +195,13 @@ class Circuit(db.Model):
     interface_a_id = db.Column(db.Integer, db.ForeignKey("interface.id"), nullable=True)
     interface_b_id = db.Column(db.Integer, db.ForeignKey("interface.id"), nullable=True)
 
+    # Optional, bundles only: the port-channel/Bundle-Ether/ae logical
+    # interface itself at each end, if the user has walked and wired one up.
+    # is_bundle stays purely "interface_a/b are null" — these are additive,
+    # not a replacement for the member-based rollup. See recompute_bundle_state.
+    lag_interface_a_id = db.Column(db.Integer, db.ForeignKey("interface.id"), nullable=True)
+    lag_interface_b_id = db.Column(db.Integer, db.ForeignKey("interface.id"), nullable=True)
+
     capacity_bps_override = db.Column(db.BigInteger, nullable=True)
 
     current_state = db.Column(db.String(20), default="up")
@@ -207,6 +214,8 @@ class Circuit(db.Model):
     role = db.relationship("CircuitRole")
     interface_a = db.relationship("Interface", foreign_keys=[interface_a_id])
     interface_b = db.relationship("Interface", foreign_keys=[interface_b_id])
+    lag_interface_a = db.relationship("Interface", foreign_keys=[lag_interface_a_id])
+    lag_interface_b = db.relationship("Interface", foreign_keys=[lag_interface_b_id])
     children = db.relationship("Circuit", backref=db.backref("parent", remote_side=[id]))
     status_history = db.relationship("CircuitStatusHistory", backref="circuit",
                                       cascade="all, delete-orphan")
@@ -254,27 +263,41 @@ class Circuit(db.Model):
         make a 200G bundle, even though each member circuit is still
         individually a 100G link. A leaf circuit's capacity is capped by
         its slower end, same idea as a cable only running as fast as its
-        weakest link."""
+        weakest link.
+
+        If the bundle has its own LAG interface polled (lag_interface_a),
+        prefer its reported speed over the member sum — the device's own
+        ifHighSpeed on the port-channel already accounts for the LAG's
+        *currently active* members, so it self-corrects when one drops,
+        where summing static member speeds would keep overstating capacity
+        until someone notices."""
         if self.capacity_bps_override:
             return self.capacity_bps_override
         if self.is_bundle:
+            if self.lag_interface_a and self.lag_interface_a.if_speed_bps:
+                return self.lag_interface_a.if_speed_bps
             return sum((c.effective_capacity_bps or 0) for c in self.children)
         speeds = [i.if_speed_bps for i in (self.interface_a, self.interface_b) if i and i.if_speed_bps]
         return min(speeds) if speeds else None
 
     @property
     def current_in_bps(self):
-        """Current usage — a bundle's is the sum of its members' (a LAG's
-        aggregate throughput is its members' combined), a leaf's is read
-        off interface_a, the same endpoint treated as canonical elsewhere
-        on this model (site_a, etc.)."""
+        """Current usage — prefers the bundle's own LAG interface counters
+        when polled (see effective_capacity_bps for why), else sums
+        members' (a LAG's aggregate throughput is its members' combined).
+        A leaf's is read off interface_a, the same endpoint treated as
+        canonical elsewhere on this model (site_a, etc.)."""
         if self.is_bundle:
+            if self.lag_interface_a and self.lag_interface_a.last_in_bps is not None:
+                return self.lag_interface_a.last_in_bps
             return sum((c.current_in_bps or 0) for c in self.children)
         return self.interface_a.last_in_bps if self.interface_a else None
 
     @property
     def current_out_bps(self):
         if self.is_bundle:
+            if self.lag_interface_a and self.lag_interface_a.last_out_bps is not None:
+                return self.lag_interface_a.last_out_bps
             return sum((c.current_out_bps or 0) for c in self.children)
         return self.interface_a.last_out_bps if self.interface_a else None
 

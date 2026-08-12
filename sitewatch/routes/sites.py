@@ -3,7 +3,7 @@ from flask_login import login_required
 
 from sitewatch.extensions import db
 from sitewatch.models import Site, Circuit, SITE_TYPES
-from sitewatch.status import compute_site_status
+from sitewatch.status import compute_site_status, site_degree_breakdown
 
 sites_bp = Blueprint("sites", __name__, url_prefix="/sites")
 
@@ -79,9 +79,8 @@ def site_detail(site_id):
         if c.site_a_id_safe() == site_id or c.site_b_id_safe() == site_id
     ]
     intra_site_circuits = [c for c in root_circuits if c.is_intra_site]
-    external_circuits = [c for c in root_circuits if not c.is_intra_site]
     return render_template(
         "site_detail.html", site=site, status=status,
         devices=site.devices, intra_site_circuits=intra_site_circuits,
-        external_circuits=external_circuits,
+        degree_breakdown=site_degree_breakdown(site),
     )

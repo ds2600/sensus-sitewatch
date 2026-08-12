@@ -22,42 +22,53 @@ document.addEventListener("DOMContentLoaded", () => {
     options: jsonData("bundles-data"),
   });
 
-  // --- endpoint pickers (device -> interface), add mode only ---
-  const devicesDataEl = document.getElementById("devices-data");
-  if (devicesDataEl) {
-    const devices = jsonData("devices-data");
-    const interfacesByDevice = jsonData("interfaces-by-device-data");
+  // --- device -> interface pickers: leaf endpoints (a/b, add mode only)
+  // and a bundle's optional LAG interfaces (lag_a/lag_b, add or edit) ---
+  const devices = jsonData("devices-data");
+  const interfacesByDevice = jsonData("interfaces-by-device-data");
 
-    function wireEndpoint(letter) {
-      const ifaceInput = document.getElementById(`interface_${letter}_search`);
-      const ifaceHidden = document.getElementById(`interface_${letter}_id`);
-      let ifaceOptions = [];
+  function wireEndpoint(prefix) {
+    const deviceInput = document.getElementById(`device_${prefix}_search`);
+    const ifaceInput = document.getElementById(`interface_${prefix}_search`);
+    const ifaceHidden = document.getElementById(`interface_${prefix}_id`);
+    if (!deviceInput || !ifaceInput || !ifaceHidden) return; // not on this form (leaf fields only exist in add mode)
 
-      searchableSelect({
-        input: ifaceInput,
-        hidden: ifaceHidden,
-        menu: document.getElementById(`interface_${letter}_menu`),
-        options: () => ifaceOptions,
-      });
+    let ifaceOptions = [];
 
-      searchableSelect({
-        input: document.getElementById(`device_${letter}_search`),
-        hidden: { value: "" }, // the device pick itself isn't submitted, only the interface it resolves to
-        menu: document.getElementById(`device_${letter}_menu`),
-        options: devices,
-        onSelect: (device) => {
-          ifaceOptions = interfacesByDevice[device.id] || [];
-          ifaceInput.value = "";
-          ifaceHidden.value = "";
-          ifaceInput.disabled = ifaceOptions.length === 0;
-          ifaceInput.placeholder = ifaceOptions.length ? "Search interface…" : "No interfaces available";
-        },
-      });
+    searchableSelect({
+      input: ifaceInput,
+      hidden: ifaceHidden,
+      menu: document.getElementById(`interface_${prefix}_menu`),
+      options: () => ifaceOptions,
+    });
+
+    searchableSelect({
+      input: deviceInput,
+      hidden: { value: "" }, // the device pick itself isn't submitted, only the interface it resolves to
+      menu: document.getElementById(`device_${prefix}_menu`),
+      options: devices,
+      onSelect: (device) => {
+        ifaceOptions = interfacesByDevice[device.id] || [];
+        ifaceInput.value = "";
+        ifaceHidden.value = "";
+        ifaceInput.disabled = ifaceOptions.length === 0;
+        ifaceInput.placeholder = ifaceOptions.length ? "Search interface…" : "No interfaces available";
+      },
+    });
+
+    // Pre-filled on load (editing a circuit that already has this set) —
+    // resolve the interface list for the already-shown device so the
+    // picker works immediately without forcing a re-pick first.
+    if (deviceInput.value) {
+      const preset = devices.find((d) => d.label === deviceInput.value);
+      if (preset) ifaceOptions = interfacesByDevice[preset.id] || [];
     }
-
-    wireEndpoint("a");
-    wireEndpoint("b");
   }
+
+  wireEndpoint("a");
+  wireEndpoint("b");
+  wireEndpoint("lag_a");
+  wireEndpoint("lag_b");
 
   // --- waypoints: ordered add/remove/drag-to-reorder list ---
   const waypointList = document.getElementById("waypoint_list");

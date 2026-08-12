@@ -34,14 +34,22 @@
 </table>
 
 <h5>External circuits</h5>
-<table class="table table-sm">
+{% for degree in degree_breakdown %}
+<div class="d-flex align-items-center gap-2 mt-3 mb-1">
+  <a href="{{ url_for('sites.site_detail', site_id=degree.site.id) }}">{{ degree.site.name }}</a>
+  <span class="badge bg-secondary">{{ degree.state }}</span>
+</div>
+<table class="table table-sm mb-0">
   <tbody>
-    {% for c in external_circuits %}
+    {% for c in degree.circuits %}
     <tr><td><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a></td>
         <td>{{ c.role.name }}</td>
         <td><span class="badge bg-secondary">{{ c.current_state }}</span></td></tr>
-    {% else %}<tr><td class="text-muted">None.</td></tr>{% endfor %}
+    {% endfor %}
   </tbody>
 </table>
+{% else %}
+<table class="table table-sm"><tbody><tr><td class="text-muted">None.</td></tr></tbody></table>
+{% endfor %}
 {% endif %}
 {% endblock %}

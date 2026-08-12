@@ -34,6 +34,49 @@ def _set_waypoints(circuit, form):
     circuit.waypoints = [CircuitWaypoint(site_id=site_id, position=i) for i, site_id in enumerate(ids)]
 
 
+def _endpoint_picker_data(exclude_circuit_id=None):
+    """Devices/interfaces available for the searchable pickers — leaf
+    endpoints (interface_a/b) on add, and a bundle's own optional LAG
+    interfaces (lag_interface_a/b) on both add and edit. An interface
+    counts as available if no OTHER circuit already uses it in any of
+    those four roles; exclude_circuit_id lets editing a circuit keep its
+    own current picks visible instead of hiding them from their own form."""
+    conditions = db.or_(
+        Circuit.interface_a_id == Interface.id, Circuit.interface_b_id == Interface.id,
+        Circuit.lag_interface_a_id == Interface.id, Circuit.lag_interface_b_id == Interface.id,
+    )
+    query = Interface.query.outerjoin(Circuit, conditions)
+    if exclude_circuit_id is not None:
+        query = query.filter(db.or_(Circuit.id.is_(None), Circuit.id == exclude_circuit_id))
+    else:
+        query = query.filter(Circuit.id.is_(None))
+    available = query.all()
+
+    # Grouped by device so the form can offer "pick a device, then pick one
+    # of its interfaces" instead of one flat list of every available
+    # interface on every device.
+    devices_by_id = {}
+    interfaces_by_device = {}
+    for i in available:
+        devices_by_id[i.device_id] = i.device
+        label = i.if_descr or f"ifIndex {i.if_index}"
+        if i.if_alias:
+            label += f" — {i.if_alias}"
+        interfaces_by_device.setdefault(str(i.device_id), []).append({"id": i.id, "label": label})
+    for ifaces in interfaces_by_device.values():
+        ifaces.sort(key=lambda x: x["label"])
+    devices_for_form = sorted(
+        ({"id": d.id, "label": f"{d.hostname} ({d.site.name})"} for d in devices_by_id.values()),
+        key=lambda x: x["label"],
+    )
+    return devices_for_form, interfaces_by_device
+
+
+def _set_lag_interfaces(circuit, form):
+    circuit.lag_interface_a_id = int(form["lag_interface_a_id"]) if form.get("lag_interface_a_id") else None
+    circuit.lag_interface_b_id = int(form["lag_interface_b_id"]) if form.get("lag_interface_b_id") else None
+
+
 @circuits_bp.route("/")
 @login_required
 def list_circuits():
@@ -54,6 +97,8 @@ def add_circuit():
         if not is_bundle:
             circuit.interface_a_id = int(f["interface_a_id"])
             circuit.interface_b_id = int(f["interface_b_id"])
+        else:
+            _set_lag_interfaces(circuit, f)
         if f.get("capacity_override"):
             circuit.capacity_bps_override = int(f["capacity_override"])
         _set_waypoints(circuit, f)
@@ -61,29 +106,7 @@ def add_circuit():
         db.session.commit()
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit.id))
 
-    unmapped_interfaces = (Interface.query
-                            .outerjoin(Circuit, (Circuit.interface_a_id == Interface.id) |
-                                       (Circuit.interface_b_id == Interface.id))
-                            .filter(Circuit.id.is_(None)).all())
-
-    # Grouped by device so the form can offer "pick a device, then pick one
-    # of its interfaces" instead of one flat list of every unmapped
-    # interface on every device.
-    devices_by_id = {}
-    interfaces_by_device = {}
-    for i in unmapped_interfaces:
-        devices_by_id[i.device_id] = i.device
-        label = i.if_descr or f"ifIndex {i.if_index}"
-        if i.if_alias:
-            label += f" — {i.if_alias}"
-        interfaces_by_device.setdefault(str(i.device_id), []).append({"id": i.id, "label": label})
-    for ifaces in interfaces_by_device.values():
-        ifaces.sort(key=lambda x: x["label"])
-    devices_for_form = sorted(
-        ({"id": d.id, "label": f"{d.hostname} ({d.site.name})"} for d in devices_by_id.values()),
-        key=lambda x: x["label"],
-    )
-
+    devices_for_form, interfaces_by_device = _endpoint_picker_data()
     return render_template(
         "circuit_form.html",
         devices_for_form=devices_for_form, interfaces_by_device=interfaces_by_device,
@@ -103,10 +126,12 @@ def circuit_detail(circuit_id):
 @circuits_bp.route("/<int:circuit_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_circuit(circuit_id):
-    """Name, role, parent, and capacity are editable. Endpoints (which
-    interfaces this circuit connects) are not — delete and recreate if
-    those need to change, so history isn't attached to a circuit that's
-    quietly become a different link."""
+    """Name, role, parent, and capacity are editable. Leaf endpoints
+    (interface_a/b) are not — delete and recreate if those need to change,
+    so history isn't attached to a circuit that's quietly become a
+    different link. A bundle's own optional LAG interfaces are editable
+    here, unlike leaf endpoints — they're monitoring enrichment, not the
+    circuit's identity."""
     circuit = Circuit.query.get_or_404(circuit_id)
     if request.method == "POST":
         f = request.form
@@ -118,6 +143,8 @@ def edit_circuit(circuit_id):
             return redirect(url_for("circuits.edit_circuit", circuit_id=circuit_id))
         circuit.parent_circuit_id = new_parent
         circuit.capacity_bps_override = int(f["capacity_override"]) if f.get("capacity_override") else None
+        if circuit.is_bundle:
+            _set_lag_interfaces(circuit, f)
         _set_waypoints(circuit, f)
         db.session.commit()
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit.id))
@@ -125,7 +152,12 @@ def edit_circuit(circuit_id):
     options = _form_options()
     options["bundles_for_form"] = [b for b in options["bundles_for_form"] if b["id"] != circuit.id]
     existing_waypoints = [{"id": w.site_id, "label": w.site.name} for w in circuit.waypoints]
-    return render_template("circuit_form.html", circuit=circuit, existing_waypoints=existing_waypoints, **options)
+    devices_for_form, interfaces_by_device = _endpoint_picker_data(exclude_circuit_id=circuit.id)
+    return render_template(
+        "circuit_form.html", circuit=circuit, existing_waypoints=existing_waypoints,
+        devices_for_form=devices_for_form, interfaces_by_device=interfaces_by_device,
+        **options,
+    )
 
 
 @circuits_bp.route("/<int:circuit_id>/delete", methods=["POST"])

@@ -80,6 +80,8 @@ def export_data():
                 "parent_circuit_id": c.parent_circuit_id,
                 "interface_a_id": c.interface_a_id,
                 "interface_b_id": c.interface_b_id,
+                "lag_interface_a_id": c.lag_interface_a_id,
+                "lag_interface_b_id": c.lag_interface_b_id,
                 "capacity_bps_override": c.capacity_bps_override,
                 "waypoints": [{"site_id": w.site_id, "position": w.position} for w in c.waypoints],
             }
@@ -148,6 +150,11 @@ def _load(data):
             parent_circuit_id=c.get("parent_circuit_id"),
             interface_a_id=c.get("interface_a_id"),
             interface_b_id=c.get("interface_b_id"),
+            # .get(), not [...] — an export from before these existed
+            # simply won't have the keys, and that must not be an import
+            # error (see CLAUDE.md's backup-compatibility rule).
+            lag_interface_a_id=c.get("lag_interface_a_id"),
+            lag_interface_b_id=c.get("lag_interface_b_id"),
             capacity_bps_override=c.get("capacity_bps_override"),
         ))
         for w in c.get("waypoints", []):
