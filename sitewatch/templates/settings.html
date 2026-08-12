@@ -3,7 +3,18 @@
 <h4>Settings</h4>
 <form method="post" class="col-md-6 mb-5">
   <div class="mb-3"><label class="form-label">Polling interval (minutes)</label>
-    <input class="form-control" name="polling_interval_minutes" value="{{ values.polling_interval_minutes }}"></div>
+    <input class="form-control" name="polling_interval_minutes" value="{{ values.polling_interval_minutes }}">
+    <div class="form-text">
+      {% if poll_stats.finished_at %}
+      Last poll cycle took {{ poll_stats.duration }}s, finished {{ poll_stats.finished_at }} UTC.
+      {% if poll_stats.duration|float >= (values.polling_interval_minutes|float * 60) %}
+      <span class="text-danger">That's at or past the configured interval — cycles may be overlapping or falling behind.</span>
+      {% endif %}
+      {% else %}
+      No poll cycle has completed yet.
+      {% endif %}
+    </div>
+  </div>
   <div class="mb-3"><label class="form-label">Down threshold (consecutive failed polls)</label>
     <input class="form-control" name="down_threshold_count" value="{{ values.down_threshold_count }}"></div>
   <div class="mb-3"><label class="form-label">Max mute duration (minutes)</label>

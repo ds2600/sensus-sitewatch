@@ -14,6 +14,7 @@
   Site: <a href="{{ url_for('sites.site_detail', site_id=device.site_id) }}">{{ device.site.name }}</a> |
   Vendor: {{ device.vendor }} |
   Reachable: {% if device.reachable %}<span class="badge bg-success">yes</span>{% else %}<span class="badge bg-primary">unreachable</span>{% endif %} |
+  Last polled: {{ device.last_polled_at or 'never' }} |
   Last walked: {{ device.last_walked_at or 'never' }}
 </p>
 <form method="post" action="{{ url_for('devices.repoll_device', device_id=device.id) }}" class="d-inline">

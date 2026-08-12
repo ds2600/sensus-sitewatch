@@ -22,7 +22,12 @@ def index():
         db.session.commit()
         return redirect(url_for("settings.index"))
     values = {k: Setting.get(k) for k in Setting.DEFAULTS}
-    return render_template("settings.html", values=values, roles=CircuitRole.query.all())
+    poll_stats = {
+        "duration": Setting.get("last_poll_duration_seconds"),
+        "finished_at": Setting.get("last_poll_finished_at"),
+    }
+    return render_template("settings.html", values=values, roles=CircuitRole.query.all(),
+                            poll_stats=poll_stats)
 
 
 @settings_bp.route("/roles/add", methods=["POST"])

@@ -8,6 +8,7 @@ known to the DB.
 """
 from datetime import datetime, timedelta
 import logging
+import time
 
 from sitewatch.extensions import db, scheduler
 from sitewatch.models import Device, Interface, Circuit, CircuitStatusHistory, Setting, Site
@@ -20,13 +21,26 @@ log = logging.getLogger(__name__)
 
 
 def poll_all_devices():
+    """One full sweep: every device polled in turn, synchronously, on a
+    single APScheduler job — not staggered or rotated across cycles. Timing
+    is recorded (Settings: last_poll_duration_seconds/last_poll_finished_at,
+    shown on the Settings page) so the configured polling_interval_minutes
+    can be checked against how long a sweep actually takes."""
+    started = time.monotonic()
+    device_count = 0
     for device in Device.query.all():
         _poll_device(device)
+        device_count += 1
     _recompute_all_circuit_states()
+    duration = time.monotonic() - started
+    Setting.set("last_poll_duration_seconds", f"{duration:.1f}")
+    Setting.set("last_poll_finished_at", datetime.utcnow().isoformat())
     db.session.commit()
+    log.info("Poll cycle finished in %.1fs (%d devices)", duration, device_count)
 
 
 def _poll_device(device):
+    device.last_polled_at = datetime.utcnow()
     device.reachable = telemetry.check_reachable(device)
     if not device.reachable:
         return  # interfaces stay at last-known values; circuit state handled via device.reachable check below

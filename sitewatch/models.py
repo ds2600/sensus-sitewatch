@@ -107,6 +107,7 @@ class Device(db.Model):
 
     reachable = db.Column(db.Boolean, default=True)
     last_walked_at = db.Column(db.DateTime, nullable=True)
+    last_polled_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     interfaces = db.relationship("Interface", backref="device", lazy=True,
