@@ -82,7 +82,7 @@ def update_role(role_id):
 def delete_role(role_id):
     role = CircuitRole.query.get_or_404(role_id)
     if Circuit.query.filter_by(role_id=role.id).first():
-        flash(f"Can't delete role '{role.name}' — circuits still use it. Reassign them first.")
+        flash(f"'{role.name}' is in use by circuits — reassign them first.")
         return redirect(url_for("settings.index"))
     db.session.delete(role)
     db.session.commit()
@@ -133,6 +133,5 @@ def import_backup():
         flash(str(e))
         return redirect(url_for("settings.index"))
 
-    flash("Import complete. Credentials aren't included in backups — re-enter "
-          "SNMP/SSH credentials on each device (Devices page) before polling will work.")
+    flash("Import complete. Re-enter device credentials — not included in backups.")
     return redirect(url_for("devices.list_devices"))

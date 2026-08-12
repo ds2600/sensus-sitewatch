@@ -4,23 +4,22 @@
 <form method="post" class="col-md-6">
   <div class="mb-3"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ circuit.name if circuit else '' }}" required></div>
 
-  <datalist id="roles-datalist">
-    {% for r in roles_for_form %}<option value="{{ r.label }}">{% endfor %}
-  </datalist>
   <div class="mb-3"><label class="form-label">Role</label>
-    <input class="form-control" list="roles-datalist" id="role_search" placeholder="Search role…" autocomplete="off"
-           value="{{ (roles_for_form | selectattr('id', 'equalto', circuit.role_id) | first).label if circuit else '' }}" required>
+    <div class="dropdown">
+      <input class="form-control" id="role_search" placeholder="Search role…" autocomplete="off"
+             value="{{ (roles_for_form | selectattr('id', 'equalto', circuit.role_id) | first).label if circuit else '' }}" required>
+      <ul class="dropdown-menu search-menu w-100" id="role_menu"></ul>
+    </div>
     <input type="hidden" name="role_id" id="role_id" value="{{ circuit.role_id if circuit else '' }}">
     <script id="roles-data" type="application/json">{{ roles_for_form | tojson }}</script>
   </div>
 
-  <datalist id="bundles-datalist">
-    <option value="None">
-    {% for b in bundles_for_form %}<option value="{{ b.label }}">{% endfor %}
-  </datalist>
-  <div class="mb-3"><label class="form-label">Parent bundle (optional)</label>
-    <input class="form-control" list="bundles-datalist" id="parent_search" placeholder="Search bundle… (optional)" autocomplete="off"
-           value="{{ (bundles_for_form | selectattr('id', 'equalto', circuit.parent_circuit_id) | first).label if circuit and circuit.parent_circuit_id else 'None' }}">
+  <div class="mb-3"><label class="form-label">Parent bundle</label>
+    <div class="dropdown">
+      <input class="form-control" id="parent_search" placeholder="None" autocomplete="off"
+             value="{{ (bundles_for_form | selectattr('id', 'equalto', circuit.parent_circuit_id) | first).label if circuit and circuit.parent_circuit_id else '' }}">
+      <ul class="dropdown-menu search-menu w-100" id="parent_menu"></ul>
+    </div>
     <input type="hidden" name="parent_circuit_id" id="parent_circuit_id" value="{{ circuit.parent_circuit_id if circuit and circuit.parent_circuit_id else '' }}">
     <script id="bundles-data" type="application/json">{{ bundles_for_form | tojson }}</script>
   </div>
@@ -28,35 +27,37 @@
   {% if not circuit %}
   <div class="form-check mb-3">
     <input class="form-check-input" type="checkbox" name="is_bundle" id="is_bundle" onchange="document.getElementById('leaf-fields').classList.toggle('d-none', this.checked)">
-    <label class="form-check-label" for="is_bundle">This is a bundle (no interfaces of its own)</label>
+    <label class="form-check-label" for="is_bundle">Bundle (no interfaces of its own)</label>
   </div>
   <div id="leaf-fields">
-    <datalist id="devices-datalist">
-      {% for d in devices_for_form %}<option value="{{ d.label }}">{% endfor %}
-    </datalist>
-
     <div class="row">
       <div class="col-6">
         <div class="mb-3"><label class="form-label">Interface A — device</label>
-          <input class="form-control" list="devices-datalist" id="device_a_search"
-                 placeholder="Search device…" autocomplete="off">
+          <div class="dropdown">
+            <input class="form-control" id="device_a_search" placeholder="Search device…" autocomplete="off">
+            <ul class="dropdown-menu search-menu w-100" id="device_a_menu"></ul>
+          </div>
         </div>
         <div class="mb-3"><label class="form-label">Interface A — interface</label>
-          <input class="form-control" list="interfaces_a_datalist" id="interface_a_search"
-                 placeholder="Select a device first…" autocomplete="off" disabled>
-          <datalist id="interfaces_a_datalist"></datalist>
+          <div class="dropdown">
+            <input class="form-control" id="interface_a_search" placeholder="Pick a device first" autocomplete="off" disabled>
+            <ul class="dropdown-menu search-menu w-100" id="interface_a_menu"></ul>
+          </div>
           <input type="hidden" name="interface_a_id" id="interface_a_id">
         </div>
       </div>
       <div class="col-6">
         <div class="mb-3"><label class="form-label">Interface B — device</label>
-          <input class="form-control" list="devices-datalist" id="device_b_search"
-                 placeholder="Search device…" autocomplete="off">
+          <div class="dropdown">
+            <input class="form-control" id="device_b_search" placeholder="Search device…" autocomplete="off">
+            <ul class="dropdown-menu search-menu w-100" id="device_b_menu"></ul>
+          </div>
         </div>
         <div class="mb-3"><label class="form-label">Interface B — interface</label>
-          <input class="form-control" list="interfaces_b_datalist" id="interface_b_search"
-                 placeholder="Select a device first…" autocomplete="off" disabled>
-          <datalist id="interfaces_b_datalist"></datalist>
+          <div class="dropdown">
+            <input class="form-control" id="interface_b_search" placeholder="Pick a device first" autocomplete="off" disabled>
+            <ul class="dropdown-menu search-menu w-100" id="interface_b_menu"></ul>
+          </div>
           <input type="hidden" name="interface_b_id" id="interface_b_id">
         </div>
       </div>
@@ -67,10 +68,10 @@
   </div>
   {% else %}
   <p class="text-muted small">
-    {% if circuit.is_bundle %}Bundle — members are managed from the circuits list, not here.
+    {% if circuit.is_bundle %}Members are managed from the circuits list.
     {% else %}{{ circuit.interface_a.device.hostname }}:{{ circuit.interface_a.if_descr }} &harr;
                {{ circuit.interface_b.device.hostname }}:{{ circuit.interface_b.if_descr }}
-               (endpoints can't be changed here — delete and recreate the circuit if they need to change)
+               (delete and recreate to change endpoints)
     {% endif %}
   </p>
   {% endif %}
@@ -80,13 +81,13 @@
   </div>
 
   <div class="mb-3">
-    <label class="form-label">Waypoints (optional)</label>
-    <div class="form-text mt-0 mb-2">Cosmetic only — bends the circuit's line on the map through these sites, in order (drag to reorder). Doesn't affect status or monitoring.</div>
-    <datalist id="waypoint-sites-datalist">
-      {% for s in sites_for_form %}<option value="{{ s.label }}">{% endfor %}
-    </datalist>
+    <label class="form-label">Waypoints</label>
+    <div class="form-text mt-0 mb-2">Cosmetic — bends the map line. Drag to reorder.</div>
     <div class="d-flex gap-2 mb-2">
-      <input class="form-control" list="waypoint-sites-datalist" id="waypoint_search" placeholder="Search site to add…" autocomplete="off">
+      <div class="dropdown flex-grow-1">
+        <input class="form-control" id="waypoint_search" placeholder="Search site to add…" autocomplete="off">
+        <ul class="dropdown-menu search-menu w-100" id="waypoint_menu"></ul>
+      </div>
       <button type="button" class="btn btn-outline-secondary text-nowrap" id="add_waypoint_btn">Add</button>
     </div>
     <ol class="list-group" id="waypoint_list"></ol>
@@ -100,5 +101,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/searchable_select.js') }}"></script>
 <script src="{{ url_for('static', filename='js/circuit_form.js') }}"></script>
 {% endblock %}

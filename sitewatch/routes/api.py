@@ -29,7 +29,8 @@ def map_data():
             "site_a": {"lat": a.lat, "lon": a.lon}, "site_b": {"lat": b.lat, "lon": b.lon},
             # Cosmetic only — bends the drawn line through these points, in
             # order, between site_a and site_b. Doesn't affect status/roll-up.
-            "waypoints": [{"lat": w.site.lat, "lon": w.site.lon} for w in c.waypoints],
+            # A bundle without its own waypoints falls back to a member's.
+            "waypoints": [{"lat": w.site.lat, "lon": w.site.lon} for w in c.effective_waypoints],
         })
     return jsonify({"sites": sites, "lines": lines})
 

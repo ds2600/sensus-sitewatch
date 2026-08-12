@@ -1,70 +1,57 @@
-// Wires up every searchable picker on circuit_form.html: role, parent
-// bundle, device -> interface endpoints (add mode only), and the ordered
-// waypoint list. Each follows the same pattern — a text input with a
-// <datalist> for the dropdown-with-search-built-in look, backed by a
-// hidden input (or, for waypoints, a hidden comma-separated list) that's
-// what actually gets submitted.
+// Wires up circuit_form.html: role, parent bundle, and (add mode only)
+// device -> interface endpoint pickers all use searchable_select.js. The
+// waypoint list adds its own picker plus an ordered add/remove/drag-to-reorder
+// list backed by a hidden comma-separated field.
 document.addEventListener("DOMContentLoaded", () => {
   function jsonData(id) {
     const el = document.getElementById(id);
     return el ? JSON.parse(el.textContent) : [];
   }
 
-  function wireSearchPicker(searchId, hiddenId, options, { clearsToEmpty } = {}) {
-    const search = document.getElementById(searchId);
-    const hidden = document.getElementById(hiddenId);
-    if (!search || !hidden) return;
-    const idByLabel = Object.fromEntries(options.map((o) => [o.label, o.id]));
-    search.addEventListener("input", () => {
-      if (clearsToEmpty && search.value === clearsToEmpty) {
-        hidden.value = "";
-        return;
-      }
-      hidden.value = idByLabel[search.value] || "";
-    });
-  }
+  searchableSelect({
+    input: document.getElementById("role_search"),
+    hidden: document.getElementById("role_id"),
+    menu: document.getElementById("role_menu"),
+    options: jsonData("roles-data"),
+  });
 
-  wireSearchPicker("role_search", "role_id", jsonData("roles-data"));
-  wireSearchPicker("parent_search", "parent_circuit_id", jsonData("bundles-data"), { clearsToEmpty: "None" });
+  searchableSelect({
+    input: document.getElementById("parent_search"),
+    hidden: document.getElementById("parent_circuit_id"),
+    menu: document.getElementById("parent_menu"),
+    options: jsonData("bundles-data"),
+  });
 
   // --- endpoint pickers (device -> interface), add mode only ---
   const devicesDataEl = document.getElementById("devices-data");
-  const interfacesDataEl = document.getElementById("interfaces-by-device-data");
-  if (devicesDataEl && interfacesDataEl) {
-    const devices = JSON.parse(devicesDataEl.textContent);
-    const interfacesByDevice = JSON.parse(interfacesDataEl.textContent);
-    const deviceIdByLabel = Object.fromEntries(devices.map((d) => [d.label, d.id]));
+  if (devicesDataEl) {
+    const devices = jsonData("devices-data");
+    const interfacesByDevice = jsonData("interfaces-by-device-data");
 
     function wireEndpoint(letter) {
-      const deviceSearch = document.getElementById(`device_${letter}_search`);
-      const ifaceSearch = document.getElementById(`interface_${letter}_search`);
-      const ifaceDatalist = document.getElementById(`interfaces_${letter}_datalist`);
+      const ifaceInput = document.getElementById(`interface_${letter}_search`);
       const ifaceHidden = document.getElementById(`interface_${letter}_id`);
-      let ifaceIdByLabel = {};
+      let ifaceOptions = [];
 
-      deviceSearch.addEventListener("input", () => {
-        const deviceId = deviceIdByLabel[deviceSearch.value];
-        ifaceSearch.value = "";
-        ifaceHidden.value = "";
-        ifaceDatalist.innerHTML = "";
-        ifaceIdByLabel = {};
-
-        if (!deviceId) {
-          ifaceSearch.disabled = true;
-          ifaceSearch.placeholder = "Select a device first…";
-          return;
-        }
-        const opts = interfacesByDevice[deviceId] || [];
-        ifaceDatalist.innerHTML = opts
-          .map((o) => `<option value="${o.label.replace(/"/g, "&quot;")}">`)
-          .join("");
-        ifaceIdByLabel = Object.fromEntries(opts.map((o) => [o.label, o.id]));
-        ifaceSearch.disabled = false;
-        ifaceSearch.placeholder = opts.length ? "Search interface…" : "No available interfaces on this device";
+      searchableSelect({
+        input: ifaceInput,
+        hidden: ifaceHidden,
+        menu: document.getElementById(`interface_${letter}_menu`),
+        options: () => ifaceOptions,
       });
 
-      ifaceSearch.addEventListener("input", () => {
-        ifaceHidden.value = ifaceIdByLabel[ifaceSearch.value] || "";
+      searchableSelect({
+        input: document.getElementById(`device_${letter}_search`),
+        hidden: { value: "" }, // the device pick itself isn't submitted, only the interface it resolves to
+        menu: document.getElementById(`device_${letter}_menu`),
+        options: devices,
+        onSelect: (device) => {
+          ifaceOptions = interfacesByDevice[device.id] || [];
+          ifaceInput.value = "";
+          ifaceHidden.value = "";
+          ifaceInput.disabled = ifaceOptions.length === 0;
+          ifaceInput.placeholder = ifaceOptions.length ? "Search interface…" : "No interfaces available";
+        },
       });
     }
 
@@ -73,12 +60,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- waypoints: ordered add/remove/drag-to-reorder list ---
-  const waypointSearch = document.getElementById("waypoint_search");
   const waypointList = document.getElementById("waypoint_list");
   const waypointHidden = document.getElementById("waypoint_site_ids");
-  if (waypointSearch && waypointList && waypointHidden) {
-    const sites = jsonData("sites-data");
-    const siteById = Object.fromEntries(sites.map((s) => [s.id, s.label]));
+  if (waypointList && waypointHidden) {
+    const waypointSearch = document.getElementById("waypoint_search");
+    const waypointPick = { value: "" };
+    searchableSelect({
+      input: waypointSearch,
+      hidden: waypointPick,
+      menu: document.getElementById("waypoint_menu"),
+      options: jsonData("sites-data"),
+    });
+
     let waypoints = jsonData("existing-waypoints-data"); // [{id, label}, ...] in order
     let dragIdx = null;
 
@@ -91,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
         li.dataset.idx = idx;
 
         const handle = document.createElement("span");
-        handle.textContent = "⠇"; // drag handle (⠇)
+        handle.textContent = "⠇";
         handle.className = "text-body-secondary me-2";
         handle.style.cursor = "grab";
         li.appendChild(handle);
@@ -133,11 +126,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     document.getElementById("add_waypoint_btn").addEventListener("click", () => {
-      const label = waypointSearch.value;
-      const id = Object.entries(siteById).find(([, l]) => l === label)?.[0];
-      if (!id) return;
-      waypoints.push({ id: Number(id), label });
+      if (!waypointPick.value) return;
+      waypoints.push({ id: Number(waypointPick.value), label: waypointSearch.value });
       waypointSearch.value = "";
+      waypointPick.value = "";
       render();
     });
 
@@ -158,7 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const bId = document.getElementById("interface_b_id").value;
       if (!aId || !bId) {
         e.preventDefault();
-        alert("Pick both interfaces — search for the device first, then choose one of its interfaces from the list.");
+        alert("Pick both interfaces — search for the device first, then choose one of its interfaces.");
       }
     }
   });

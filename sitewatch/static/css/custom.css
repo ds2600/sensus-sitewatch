@@ -6,3 +6,23 @@
 .status-red    { color: #dc3545; }
 .status-gray   { color: #6c757d; }
 .status-blue   { color: #0d6efd; }
+
+/* Searchable dropdown (searchable_select.js) — manually toggled .dropdown-menu,
+   not Bootstrap's JS plugin, so it needs its own position/size rules instead
+   of relying on Popper. */
+.dropdown-menu.search-menu {
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+/* Dashboard map — dominates the viewport instead of a small fixed box.
+   vh recalculates on its own as the window resizes; Leaflet still needs
+   an explicit invalidateSize() call on resize (see map.js) since it
+   caches the container size at init and won't redraw around a CSS-driven
+   size change on its own. */
+#map {
+  height: 95vh;
+}

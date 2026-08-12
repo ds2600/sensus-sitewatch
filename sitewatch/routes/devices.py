@@ -42,7 +42,7 @@ def add_device():
         f = request.form
         site = Site.query.get_or_404(int(f["site_id"]))
         if site.site_type == "passthrough":
-            flash("Can't assign a device to a passthrough site — those are map waypoints with no equipment.")
+            flash("Passthrough sites can't have devices assigned.")
             return redirect(url_for("devices.add_device"))
         device = Device(
             site_id=site.id, hostname=f["hostname"], mgmt_ip=f["mgmt_ip"],
@@ -82,7 +82,7 @@ def edit_device(device_id):
         f = request.form
         site = Site.query.get_or_404(int(f["site_id"]))
         if site.site_type == "passthrough":
-            flash("Can't assign a device to a passthrough site — those are map waypoints with no equipment.")
+            flash("Passthrough sites can't have devices assigned.")
             return redirect(url_for("devices.edit_device", device_id=device_id))
         device.site_id = site.id
         device.hostname = f["hostname"]
@@ -106,7 +106,7 @@ def delete_device(device_id):
         db.or_(Circuit.interface_a_id.in_(iface_ids), Circuit.interface_b_id.in_(iface_ids))
     ).first() if iface_ids else None
     if in_use:
-        flash(f"Can't delete this device — its interfaces are used by circuit '{in_use.name}'. Delete that circuit first.")
+        flash(f"In use by circuit '{in_use.name}' — delete that first.")
         return redirect(url_for("devices.device_detail", device_id=device_id))
     db.session.delete(device)  # interfaces cascade-delete automatically
     db.session.commit()
@@ -152,9 +152,7 @@ def repoll_device(device_id):
         d = Device.query.get_or_404(device_id)
         poll_device_now(d)
         if not d.reachable and not _has_snmp_credentials(d):
-            job_log.log_line(job_id,
-                f"NOTE: {hostname} has no SNMP credentials configured — set them on the Edit "
-                f"page (devices imported from NetBox never carry credentials).")
+            job_log.log_line(job_id, "NOTE: no SNMP credentials set — add them on the Edit page.")
 
     _run_in_background(job_id, work)
     return jsonify({"job_id": job_id, "label": f"Repolling {hostname}",

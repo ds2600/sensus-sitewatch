@@ -132,7 +132,7 @@ def edit_circuit(circuit_id):
 def delete_circuit(circuit_id):
     circuit = Circuit.query.get_or_404(circuit_id)
     if circuit.children:
-        flash(f"Can't delete '{circuit.name}' — it still has {len(circuit.children)} member circuit(s). Delete or reassign those first.")
+        flash(f"Has {len(circuit.children)} member circuit(s) — reassign or delete those first.")
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
     db.session.delete(circuit)
     db.session.commit()

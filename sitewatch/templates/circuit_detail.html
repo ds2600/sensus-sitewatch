@@ -12,11 +12,12 @@
   </div>
 </div>
 <p>Role: {{ circuit.role.name }} ({{ circuit.role.tier }}) | Type: {{ 'bundle' if circuit.is_bundle else 'point-to-point' }}</p>
-{% if circuit.waypoints %}
+{% if circuit.effective_waypoints %}
 <p class="text-body-secondary small">
   Map route: {{ circuit.site_a.name if circuit.site_a }} &rarr;
-  {% for w in circuit.waypoints %}{{ w.site.name }}{{ ' &rarr; ' | safe if not loop.last }}{% endfor %}
+  {% for w in circuit.effective_waypoints %}{{ w.site.name }}{{ ' &rarr; ' | safe if not loop.last }}{% endfor %}
   &rarr; {{ circuit.site_b.name if circuit.site_b }}
+  {% if circuit.is_bundle and not circuit.waypoints %}<span class="text-body-secondary">(from a member)</span>{% endif %}
 </p>
 {% endif %}
 

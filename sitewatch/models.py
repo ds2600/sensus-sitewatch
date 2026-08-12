@@ -278,6 +278,22 @@ class Circuit(db.Model):
             return sum((c.current_out_bps or 0) for c in self.children)
         return self.interface_a.last_out_bps if self.interface_a else None
 
+    @property
+    def effective_waypoints(self):
+        """Only the root circuit's own line is ever drawn on the map (see
+        api.py), so a bundle's waypoints have to live somewhere reachable
+        from the bundle itself. If the bundle has none set directly, fall
+        back to the first member that has some — bundle members are
+        parallel links between the same two sites, so they typically share
+        one physical route anyway."""
+        if self.waypoints:
+            return self.waypoints
+        if self.is_bundle:
+            for child in self.children:
+                if child.waypoints:
+                    return child.waypoints
+        return []
+
 
 class CircuitWaypoint(db.Model):
     """Purely cosmetic — an ordered point the map draws the circuit's line

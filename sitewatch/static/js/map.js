@@ -4,11 +4,55 @@ const STATUS_COLOR = { green: "#198754", yellow: "#ffc107", red: "#dc3545", blue
 const CIRCUIT_COLOR = { up: "#198754", degraded: "#ffc107", down: "#dc3545",
                          admin_down: "#6c757d", unreachable: "#0d6efd" };
 
+// Quadratic bezier from p0 to p1, bulging toward a control point offset
+// perpendicular to the p0->p1 line by `magnitude` at the midpoint. p0/p1
+// are untouched — only the middle of the curve moves — so multiple
+// parallel circuits between the same two sites can fan out for visibility
+// without their endpoints drifting off the site markers they connect to.
+function curvedSegment(p0, p1, magnitude, steps = 16) {
+  const dLat = p1[0] - p0[0];
+  const dLon = p1[1] - p0[1];
+  const len = Math.sqrt(dLat * dLat + dLon * dLon) || 1;
+  const control = [
+    (p0[0] + p1[0]) / 2 + (-dLon / len) * magnitude,
+    (p0[1] + p1[1]) / 2 + (dLat / len) * magnitude,
+  ];
+  const points = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    points.push([
+      mt * mt * p0[0] + 2 * mt * t * control[0] + t * t * p1[0],
+      mt * mt * p0[1] + 2 * mt * t * control[1] + t * t * p1[1],
+    ]);
+  }
+  return points;
+}
+
+// A circuit's full path (site_a -> waypoints -> site_b) as one curved
+// polyline — each leg curves independently so waypoints stay fixed
+// pass-through points, not just the two real endpoints.
+function curvedPath(points, magnitude) {
+  const latLngs = points.map((p) => [p.lat, p.lon]);
+  if (!magnitude) return latLngs;
+  let path = [];
+  for (let i = 0; i < latLngs.length - 1; i++) {
+    const seg = curvedSegment(latLngs[i], latLngs[i + 1], magnitude);
+    path = path.concat(i === 0 ? seg : seg.slice(1)); // drop duplicate joint point
+  }
+  return path;
+}
+
 async function loadMap() {
   const map = L.map("map").setView([39.8, -98.6], 4); // CONUS fallback until sites load (or if there are none)
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
+
+  // #map's height is 95vh (custom.css) so it tracks window resizes on its
+  // own, but Leaflet caches its container size at init and won't redraw
+  // around a CSS-driven size change without being told to.
+  window.addEventListener("resize", () => map.invalidateSize());
 
   const res = await fetch("/api/map");
   const data = await res.json();
@@ -35,12 +79,8 @@ async function loadMap() {
 
   Object.values(byPair).forEach((group) => {
     group.forEach((l, idx) => {
-      const offset = (idx - (group.length - 1) / 2) * 0.05;
-      // Cosmetic waypoints (see CircuitWaypoint) bend the line through
-      // intermediate points, in order, between the two real endpoints —
-      // same offset applied throughout so parallel circuits on the same
-      // site pair still stay visually separated along the whole path.
-      const points = [l.site_a, ...(l.waypoints || []), l.site_b].map((p) => [p.lat + offset, p.lon + offset]);
+      const magnitude = (idx - (group.length - 1) / 2) * 0.08;
+      const points = curvedPath([l.site_a, ...(l.waypoints || []), l.site_b], magnitude);
       L.polyline(points, { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 })
         .bindPopup(`<a href="/circuits/${l.id}">${l.name}</a> (${l.role})`).addTo(map);
     });

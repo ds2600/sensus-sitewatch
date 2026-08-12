@@ -11,7 +11,7 @@
       <option value="site" {{ 'selected' if not site or site.site_type == 'site' else '' }}>Site (has equipment)</option>
       <option value="passthrough" {{ 'selected' if site and site.site_type == 'passthrough' else '' }}>Passthrough (map waypoint only, no equipment)</option>
     </select>
-    <div class="form-text">Passthrough locations show on the map as a marker for reference (e.g. a splice point or tower on a circuit's route) but can't have devices assigned.</div>
+    <div class="form-text">Passthrough: map marker only, no devices.</div>
   </div>
   <button class="btn btn-primary">Save</button>
 </form>

@@ -45,7 +45,7 @@ def edit_site(site_id):
         if site_type not in SITE_TYPES:
             site_type = "site"
         if site_type == "passthrough" and site.devices:
-            flash("Can't mark a site as passthrough while it still has devices assigned. Remove or reassign them first.")
+            flash("Has devices assigned — remove or reassign them first.")
             return redirect(url_for("sites.edit_site", site_id=site_id))
         site.name = request.form["name"]
         site.lat = float(request.form["lat"])
@@ -61,7 +61,7 @@ def edit_site(site_id):
 def delete_site(site_id):
     site = Site.query.get_or_404(site_id)
     if site.devices:
-        flash("Can't delete a site that still has devices assigned. Remove or reassign them first.")
+        flash("Has devices assigned — remove or reassign them first.")
         return redirect(url_for("sites.site_detail", site_id=site_id))
     db.session.delete(site)
     db.session.commit()

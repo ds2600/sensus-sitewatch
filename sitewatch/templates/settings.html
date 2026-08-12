@@ -93,12 +93,7 @@
 
 <h5>Backup &amp; restore</h5>
 <div class="alert alert-warning col-md-6">
-  A backup covers sites, devices, interfaces, circuits, circuit roles, and
-  settings — it does <strong>not</strong> include device credentials (SNMP
-  community/keys, SSH password). After importing a backup, re-enter
-  credentials on each device from the
-  <a href="{{ url_for('devices.list_devices') }}">Devices</a> page before
-  polling will work again.
+  Excludes device credentials — re-enter them on <a href="{{ url_for('devices.list_devices') }}">Devices</a> after import.
 </div>
 <div class="col-md-6 d-flex gap-2 align-items-start">
   <a class="btn btn-outline-primary" href="{{ url_for('settings.export_backup') }}">Export backup (.json)</a>
