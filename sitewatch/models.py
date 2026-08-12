@@ -212,6 +212,8 @@ class Circuit(db.Model):
                                       cascade="all, delete-orphan")
     alert_mute = db.relationship("AlertMute", backref="circuit",
                                   cascade="all, delete-orphan", uselist=False)
+    waypoints = db.relationship("CircuitWaypoint", backref="circuit", order_by="CircuitWaypoint.position",
+                                 cascade="all, delete-orphan")
 
     @property
     def is_bundle(self):
@@ -275,6 +277,24 @@ class Circuit(db.Model):
         if self.is_bundle:
             return sum((c.current_out_bps or 0) for c in self.children)
         return self.interface_a.last_out_bps if self.interface_a else None
+
+
+class CircuitWaypoint(db.Model):
+    """Purely cosmetic — an ordered point the map draws the circuit's line
+    through between its two real endpoints (site_a/site_b, still derived
+    from interface_a/interface_b same as always). Doesn't feed status,
+    capacity, or anything else; a waypoint site doesn't need to be a
+    passthrough site, just usually is one, since that's the case this
+    exists for (a fiber route physically passing through a hut/manhole
+    with no monitored equipment)."""
+    id = db.Column(db.Integer, primary_key=True)
+    circuit_id = db.Column(db.Integer, db.ForeignKey("circuit.id"), nullable=False)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=False)
+    position = db.Column(db.Integer, nullable=False)
+
+    site = db.relationship("Site")
+
+    __table_args__ = (db.UniqueConstraint("circuit_id", "position"),)
 
 
 class CircuitStatusHistory(db.Model):

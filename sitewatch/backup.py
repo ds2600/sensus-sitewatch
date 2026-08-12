@@ -1,6 +1,6 @@
 """Full-config export/import as a single JSON file — the "backup the whole
 monitoring solution" feature. Covers sites, devices, interfaces, circuit
-roles, circuits, and settings.
+roles, circuits (including their cosmetic map waypoints), and settings.
 
 Deliberately excluded:
 - Device credentials (SNMP community/keys, SSH password). Never decrypted
@@ -21,7 +21,7 @@ from datetime import datetime
 
 from sitewatch.extensions import db
 from sitewatch.models import (
-    Site, Device, Interface, CircuitRole, Circuit, Setting,
+    Site, Device, Interface, CircuitRole, Circuit, CircuitWaypoint, Setting,
     CircuitStatusHistory, AlertMute, UtilizationRollup,
 )
 
@@ -81,6 +81,7 @@ def export_data():
                 "interface_a_id": c.interface_a_id,
                 "interface_b_id": c.interface_b_id,
                 "capacity_bps_override": c.capacity_bps_override,
+                "waypoints": [{"site_id": w.site_id, "position": w.position} for w in c.waypoints],
             }
             for c in Circuit.query.all()
         ],
@@ -105,6 +106,7 @@ def _wipe():
     CircuitStatusHistory.query.delete()
     AlertMute.query.delete()
     UtilizationRollup.query.delete()
+    CircuitWaypoint.query.delete()
     Circuit.query.delete()
     Interface.query.delete()
     Device.query.delete()
@@ -148,6 +150,8 @@ def _load(data):
             interface_b_id=c.get("interface_b_id"),
             capacity_bps_override=c.get("capacity_bps_override"),
         ))
+        for w in c.get("waypoints", []):
+            db.session.add(CircuitWaypoint(circuit_id=c["id"], site_id=w["site_id"], position=w["position"]))
     for k, v in data["settings"].items():
         if k in Setting.DEFAULTS:
             Setting.set(k, v)

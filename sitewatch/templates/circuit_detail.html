@@ -12,6 +12,13 @@
   </div>
 </div>
 <p>Role: {{ circuit.role.name }} ({{ circuit.role.tier }}) | Type: {{ 'bundle' if circuit.is_bundle else 'point-to-point' }}</p>
+{% if circuit.waypoints %}
+<p class="text-body-secondary small">
+  Map route: {{ circuit.site_a.name if circuit.site_a }} &rarr;
+  {% for w in circuit.waypoints %}{{ w.site.name }}{{ ' &rarr; ' | safe if not loop.last }}{% endfor %}
+  &rarr; {{ circuit.site_b.name if circuit.site_b }}
+</p>
+{% endif %}
 
 <h5>Utilization</h5>
 {% set capacity = circuit.effective_capacity_bps %}

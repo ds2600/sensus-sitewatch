@@ -27,6 +27,9 @@ def map_data():
             "id": c.id, "name": c.name, "state": c.current_state,
             "role": c.role.name, "tier": c.role.tier,
             "site_a": {"lat": a.lat, "lon": a.lon}, "site_b": {"lat": b.lat, "lon": b.lon},
+            # Cosmetic only — bends the drawn line through these points, in
+            # order, between site_a and site_b. Doesn't affect status/roll-up.
+            "waypoints": [{"lat": w.site.lat, "lon": w.site.lon} for w in c.waypoints],
         })
     return jsonify({"sites": sites, "lines": lines})
 

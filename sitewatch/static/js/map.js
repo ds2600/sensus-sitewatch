@@ -36,10 +36,13 @@ async function loadMap() {
   Object.values(byPair).forEach((group) => {
     group.forEach((l, idx) => {
       const offset = (idx - (group.length - 1) / 2) * 0.05;
-      L.polyline(
-        [[l.site_a.lat + offset, l.site_a.lon + offset], [l.site_b.lat + offset, l.site_b.lon + offset]],
-        { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 }
-      ).bindPopup(`<a href="/circuits/${l.id}">${l.name}</a> (${l.role})`).addTo(map);
+      // Cosmetic waypoints (see CircuitWaypoint) bend the line through
+      // intermediate points, in order, between the two real endpoints —
+      // same offset applied throughout so parallel circuits on the same
+      // site pair still stay visually separated along the whole path.
+      const points = [l.site_a, ...(l.waypoints || []), l.site_b].map((p) => [p.lat + offset, p.lon + offset]);
+      L.polyline(points, { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 })
+        .bindPopup(`<a href="/circuits/${l.id}">${l.name}</a> (${l.role})`).addTo(map);
     });
   });
 

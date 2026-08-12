@@ -52,6 +52,21 @@ def install():
     handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
     sitewatch_logger = logging.getLogger("sitewatch")
     sitewatch_logger.addHandler(handler)
+
+    # Flask names app.logger after the app's import name, which is
+    # "sitewatch" here — so the handler just added above is now attached to
+    # the same logger Flask itself logs unhandled request exceptions
+    # through. Python's logging only falls back to its default stderr
+    # handler when a logger has NO handler anywhere in its chain; since we
+    # just gave it one (which silently no-ops unless a job is watching —
+    # see JobLogHandler.emit), a real 500 during normal request handling
+    # would otherwise vanish with no trace anywhere. Add a plain
+    # WARNING+ stderr handler back explicitly so that can't happen.
+    if not any(isinstance(h, logging.StreamHandler) for h in sitewatch_logger.handlers):
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(logging.WARNING)
+        sitewatch_logger.addHandler(stream_handler)
+
     if sitewatch_logger.level == logging.NOTSET or sitewatch_logger.level > logging.INFO:
         sitewatch_logger.setLevel(logging.INFO)
 
