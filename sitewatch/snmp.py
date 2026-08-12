@@ -118,6 +118,38 @@ def snmp_get(device, oid, timeout=3, retries=1):
     return value
 
 
+def snmp_get_multi(device, oids, timeout=3, retries=1):
+    """Like snmp_get, but carries every OID in one PDU/round trip instead of
+    one call per OID — poll_interface_counters uses this so a single
+    interface's oper/admin/in/out counters cost one packet exchange, not
+    four. Returns a dict keyed by the input oid strings, same value shape
+    snmp_get returns; raises SnmpError under the same conditions."""
+    t0 = time.monotonic()
+    log.info("GET %s from %s (%s, timeout=%ss retries=%s)",
+              ", ".join(_oid_label(o) for o in oids), device.mgmt_ip, device.snmp_version, timeout, retries)
+    engine = SnmpEngine()
+    iterator = getCmd(
+        engine, _auth_data(device), UdpTransportTarget((device.mgmt_ip, 161), timeout=timeout, retries=retries),
+        ContextData(), *(ObjectType(ObjectIdentity(oid)) for oid in oids),
+    )
+    try:
+        error_indication, error_status, _, var_binds = next(iterator)
+    except PySnmpError as e:
+        log.info("  -> FAILED after %.2fs: %s", time.monotonic() - t0, e)
+        raise SnmpError(str(e)) from e
+    if error_indication or error_status:
+        log.info("  -> FAILED after %.2fs: %s", time.monotonic() - t0, error_indication or error_status)
+        raise SnmpError(str(error_indication or error_status))
+    result = {}
+    for oid, (_, value) in zip(oids, var_binds):
+        if isinstance(value, _MISSING_VALUE_TYPES):
+            log.info("  -> FAILED after %.2fs: %s not present (no such instance)", time.monotonic() - t0, oid)
+            raise SnmpError(f"{oid} not present on this device (no such instance).")
+        result[oid] = value
+    log.info("  -> %s (%.2fs)", ", ".join(str(v) for v in result.values()), time.monotonic() - t0)
+    return result
+
+
 def snmp_walk(device, base_oid, timeout=3, retries=1):
     """Returns list of (index, value) tuples, index parsed as int from the
     trailing OID component."""
@@ -188,14 +220,16 @@ def walk_interfaces(device):
 
 def poll_interface_counters(device, if_index):
     """GET (not walk) for a single interface's live status + counters. Used
-    on every regular poll cycle — full walks only happen on manual re-walk."""
-    oper = snmp_get(device, f"{OID_IF_OPER_STATUS}.{if_index}")
-    admin = snmp_get(device, f"{OID_IF_ADMIN_STATUS}.{if_index}")
-    in_octets = snmp_get(device, f"{OID_IF_HC_IN_OCTETS}.{if_index}")
-    out_octets = snmp_get(device, f"{OID_IF_HC_OUT_OCTETS}.{if_index}")
+    on every regular poll cycle — full walks only happen on manual re-walk.
+    One combined GET (see snmp_get_multi) instead of four separate ones."""
+    oid_oper = f"{OID_IF_OPER_STATUS}.{if_index}"
+    oid_admin = f"{OID_IF_ADMIN_STATUS}.{if_index}"
+    oid_in = f"{OID_IF_HC_IN_OCTETS}.{if_index}"
+    oid_out = f"{OID_IF_HC_OUT_OCTETS}.{if_index}"
+    values = snmp_get_multi(device, [oid_oper, oid_admin, oid_in, oid_out])
     return {
-        "oper_status": "up" if str(oper) == "1" else "down",
-        "admin_status": "up" if str(admin) == "1" else "down",
-        "in_octets": int(in_octets),
-        "out_octets": int(out_octets),
+        "oper_status": "up" if str(values[oid_oper]) == "1" else "down",
+        "admin_status": "up" if str(values[oid_admin]) == "1" else "down",
+        "in_octets": int(values[oid_in]),
+        "out_octets": int(values[oid_out]),
     }

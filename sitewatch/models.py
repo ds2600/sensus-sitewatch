@@ -40,6 +40,7 @@ class Setting(db.Model):
         "mute_max_minutes": "60",
         "google_chat_webhook_url": "",
         "status_history_retention_days": "30",
+        "poller_max_workers": "8",
     }
 
     @staticmethod

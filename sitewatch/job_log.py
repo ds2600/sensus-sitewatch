@@ -106,6 +106,27 @@ def run_job(job_id, fn, app):
         _current_job_id.value = None
 
 
+def current_job_id():
+    """The job the CALLING thread is running, if any — for code that wants
+    to hand its job context to a worker thread it's about to spawn (see
+    run_in_job)."""
+    return getattr(_current_job_id, "value", None)
+
+
+def run_in_job(job_id, fn, *args, **kwargs):
+    """Runs fn(*args, **kwargs) on the calling thread with its log records
+    routed into job_id's buffer. _current_job_id is per-OS-thread, so a
+    thread pool's worker threads don't inherit it from whatever thread
+    called run_job() — poller.py's device-concurrency pool uses this to
+    make SNMP GET/WALK log lines from worker threads still show up in the
+    poll cycle's/repoll's live log tail instead of silently vanishing."""
+    _current_job_id.value = job_id
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        _current_job_id.value = None
+
+
 def log_line(job_id, message):
     _append(job_id, message)
 

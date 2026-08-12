@@ -17,6 +17,10 @@
   </div>
   <div class="mb-3"><label class="form-label">Down threshold (consecutive failed polls)</label>
     <input class="form-control" name="down_threshold_count" value="{{ values.down_threshold_count }}"></div>
+  <div class="mb-3"><label class="form-label">Max concurrent devices polled</label>
+    <input class="form-control" name="poller_max_workers" value="{{ values.poller_max_workers }}">
+    <div class="form-text">Devices polled at once each cycle. Higher is faster, but hits the network harder.</div>
+  </div>
   <div class="mb-3"><label class="form-label">Max mute duration (minutes)</label>
     <input class="form-control" name="mute_max_minutes" value="{{ values.mute_max_minutes }}"></div>
   <div class="mb-3"><label class="form-label">Google Chat webhook URL</label>
