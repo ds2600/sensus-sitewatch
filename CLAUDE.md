@@ -121,6 +121,28 @@ code must say exactly what to do after `git pull`, e.g.:
 
 Don't make the user infer this from the diff — state it plainly every time.
 
+## Bump the version on every code change
+
+`sitewatch/__init__.py`'s `__version__` (SemVer, shown in the page footer)
+must be bumped as part of any response that changes code — same
+don't-make-the-user-infer-it spirit as the pull note above. Pick the
+level based on what actually shipped:
+
+- **Patch** (`0.1.1` → `0.1.2`): bug fixes, visual/copy tweaks, doc fixes —
+  nothing a user would call a "feature."
+- **Minor** (`0.1.1` → `0.2.0`): a new feature or user-visible capability
+  (a new page, a new import type, a new setting), even a small one. Also
+  use minor for a breaking change while still pre-1.0 (`0.x`) — the app
+  isn't API/schema-stable yet, so `1.0.0` is reserved for the first
+  release considered "done," not for the first breaking change.
+- **Major**: not until `1.0.0` exists. After that, only for a genuinely
+  breaking change (e.g. a `backup.py` `VERSION` bump, a removed feature).
+
+One bump per response covers everything shipped in it, at whichever
+level the highest-impact change in that response requires — don't bump
+separately per commit or per file. A response with no code change (a
+question, a plan, pure research) doesn't need one.
+
 ## Schema changes must not cost the user their data
 
 Two layers exist for this, in order of preference:
