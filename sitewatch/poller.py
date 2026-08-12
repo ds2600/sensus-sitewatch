@@ -41,6 +41,13 @@ def poll_all_devices():
         device_count = 0
         for device in Device.query.all():
             _poll_device(device)
+            # Commit after each device rather than once at the end of the
+            # whole sweep — SQLite only allows one writer at a time, so
+            # holding a single transaction open across every device (each
+            # doing a few synchronous SNMP GETs) can lock out a concurrent
+            # request — e.g. someone saving a device edit — for as long as
+            # the entire sweep takes, not just one device's worth.
+            db.session.commit()
             device_count += 1
         _recompute_all_circuit_states()
         duration = time.monotonic() - started

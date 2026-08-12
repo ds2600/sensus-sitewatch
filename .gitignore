@@ -4,5 +4,7 @@ __pycache__/
 .env
 instance/*.db
 instance/*.db-journal
+instance/*.db-shm
+instance/*.db-wal
 .DS_Store
 *.egg-info/
