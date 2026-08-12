@@ -31,7 +31,13 @@
   </nav>
   {% endif %}
 
-  <div class="container-fluid p-4">
+  <!-- container-xxl, not container-fluid: full-width on normal/laptop
+       screens, caps out at 1320px past the xxl breakpoint instead of
+       stretching everything (table columns, button placement) across an
+       ultrawide monitor — see the mouse-travel complaint this was added
+       for. The map still gets plenty of room; it just stops growing
+       past a sane point. -->
+  <div class="container-xxl p-4">
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         {% for m in messages %}<div class="alert alert-info">{{ m }}</div>{% endfor %}
