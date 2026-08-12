@@ -43,16 +43,15 @@ function curvedPath(points, magnitude) {
   return path;
 }
 
-// Sizes #map against the actual rendered header height rather than a flat
-// vh guess, which can't know how tall the navbar really is (wrapped nav
-// links on a narrow window, browser chrome, etc). Leaves a little room
-// below for breathing room rather than running edge-to-edge.
+// Deliberately well short of the full viewport — a map that fills nearly
+// the whole screen leaves almost no room to land the mouse off it, and
+// Leaflet zooms on scroll wheel by default, so it was eating page-scroll
+// input instead of letting the page scroll (the "Currently down" table
+// etc. below it) like a normal page. ~45% of the window leaves plenty of
+// room either side of the map to scroll normally.
 function sizeMapContainer() {
   const el = document.getElementById("map");
-  const nav = document.querySelector("nav.navbar");
-  const navHeight = nav ? nav.getBoundingClientRect().height : 0;
-  const chrome = navHeight + 64; // container-fluid's top padding + a bit of breathing room below
-  el.style.height = Math.max(300, window.innerHeight - chrome) + "px";
+  el.style.height = Math.max(320, Math.round(window.innerHeight * 0.45)) + "px";
 }
 
 // Regional views (see the Manage Regions page): a plain cookie, not a

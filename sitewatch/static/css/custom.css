@@ -18,17 +18,18 @@
   overflow-y: auto;
 }
 
-/* Dashboard map — sized precisely in map.js (viewport height minus the
-   actual navbar height, measured at runtime), since a flat vh value
-   can't account for the header. This is just the pre-JS fallback. */
+/* Dashboard map — kept well under the full viewport on purpose (see
+   map.js's sizeMapContainer) so there's room to scroll the page normally
+   without the mouse landing on the map and Leaflet's scroll-to-zoom
+   grabbing the input instead. This is just the pre-JS fallback. */
 #map {
-  height: 70vh;
+  height: 45vh;
 }
 
 /* Manage Regions page — orange border marks "you're positioning a view to
    save", distinct from the read-only dashboard map right next to it in
    the nav. */
 #region-edit-map {
-  height: 60vh;
+  height: 45vh;
   border: 4px solid #fd7e14;
 }
