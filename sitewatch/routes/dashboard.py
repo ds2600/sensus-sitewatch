@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template
 from flask_login import login_required
-from sitewatch.models import Circuit, CircuitStatusHistory, MapRegion, Region
+from sitewatch.models import Circuit, CircuitStatusHistory, MapRegion
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -18,6 +18,5 @@ def index():
                          .filter(CircuitStatusHistory.cleared_at.isnot(None))
                          .order_by(CircuitStatusHistory.cleared_at.desc()).limit(20).all())
     map_views = MapRegion.query.order_by(MapRegion.name).all()
-    site_regions = Region.query.order_by(Region.name).all()
     return render_template("dashboard.html", down_now=down_now, recently_cleared=recently_cleared,
-                            map_views=map_views, site_regions=site_regions)
+                            map_views=map_views)

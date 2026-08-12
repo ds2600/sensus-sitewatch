@@ -27,10 +27,9 @@
 
 <h5>Utilization</h5>
 {% set capacity = circuit.effective_capacity_bps %}
-<p class="mb-4">
-  In {{ circuit.current_in_bps | bps }} / Out {{ circuit.current_out_bps | bps }} /
-  Capacity {{ capacity | bps }} / {{ util_pct(circuit.current_in_bps, circuit.current_out_bps, capacity) }}
-</p>
+<p class="mb-1">{{ circuit.flow_out_label }}: {{ circuit.current_out_bps | bps }}</p>
+<p class="mb-1">{{ circuit.flow_in_label }}: {{ circuit.current_in_bps | bps }}</p>
+<p class="mb-4">Capacity {{ capacity | bps }} / {{ util_pct(circuit.current_in_bps, circuit.current_out_bps, capacity) }}</p>
 
 {% if circuit.is_bundle %}
 <div class="d-flex align-items-center gap-2">
@@ -38,7 +37,7 @@
   <a class="btn btn-outline-primary btn-sm" href="{{ url_for('circuits.add_circuit', parent_id=circuit.id) }}">Add member circuit</a>
 </div>
 <table class="table table-sm mb-3">
-  <thead><tr><th>Name</th><th>State</th><th>Capacity</th><th>In</th><th>Out</th><th>Util</th></tr></thead>
+  <thead><tr><th>Name</th><th>State</th><th>Capacity</th><th>Traffic</th><th>Util</th></tr></thead>
   <tbody>
     {% for c in circuit.children %}
     {% set member_capacity = c.effective_capacity_bps %}
@@ -46,8 +45,10 @@
       <td><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a></td>
       <td><span class="badge bg-secondary">{{ c.current_state }}</span></td>
       <td>{{ member_capacity | bps }}</td>
-      <td>{{ c.current_in_bps | bps }}</td>
-      <td>{{ c.current_out_bps | bps }}</td>
+      <td>
+        <div class="small text-nowrap">{{ c.flow_out_label }}: {{ c.current_out_bps | bps }}</div>
+        <div class="small text-nowrap">{{ c.flow_in_label }}: {{ c.current_in_bps | bps }}</div>
+      </td>
       <td>{{ util_pct(c.current_in_bps, c.current_out_bps, member_capacity) }}</td>
     </tr>
     {% endfor %}

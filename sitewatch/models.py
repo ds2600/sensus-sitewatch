@@ -308,6 +308,40 @@ class Circuit(db.Model):
         return self.interface_a.last_in_bps if self.interface_a else None
 
     @property
+    def _endpoint_a_label(self):
+        """What to call interface_a's end when labeling a direction of
+        flow — the site name normally, but a leaf circuit's two interfaces
+        can share a site (intra-site, device-to-device within one
+        building), where "Site X" on both ends of an arrow says nothing.
+        Falls back to the device hostname there instead."""
+        if not self.is_bundle and self.is_intra_site and self.interface_a:
+            return self.interface_a.device.hostname
+        return self.site_a.name if self.site_a else "?"
+
+    @property
+    def _endpoint_b_label(self):
+        if not self.is_bundle and self.is_intra_site and self.interface_b:
+            return self.interface_b.device.hostname
+        return self.site_b.name if self.site_b else "?"
+
+    @property
+    def flow_out_label(self):
+        """Human label for current_out_bps's direction: traffic leaving
+        interface_a's end toward interface_b's end. Circuit creation picks
+        which interface is "a" arbitrarily (whichever the form's Interface
+        A field got), so without a label, "Out" alone doesn't say which of
+        the two sites it's leaving — a circuit list mixing several circuits
+        each with a different arbitrary "a" end would show numbers with no
+        consistent site-to-site meaning."""
+        return f"{self._endpoint_a_label} → {self._endpoint_b_label}"
+
+    @property
+    def flow_in_label(self):
+        """Human label for current_in_bps's direction — the reverse of
+        flow_out_label."""
+        return f"{self._endpoint_b_label} → {self._endpoint_a_label}"
+
+    @property
     def current_out_bps(self):
         if self.is_bundle:
             if self.lag_interface_a and self.lag_interface_a.last_out_bps is not None:

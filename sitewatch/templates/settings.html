@@ -57,7 +57,7 @@
 <h5>Map views</h5>
 <p class="mb-5"><a href="{{ url_for('regions.manage_regions') }}">Manage map views</a></p>
 
-<h5 id="site-regions">Site regions</h5>
+<h5 id="site-regions">Regions</h5>
 <p class="text-body-secondary small">Groups sites for sorting, filtering, and search — see the Sites list.</p>
 <table class="table table-sm col-md-6">
   <thead><tr><th>Name</th><th></th></tr></thead>
@@ -127,7 +127,7 @@
   <a class="btn btn-outline-primary" href="{{ url_for('settings.export_backup', scope='all') }}">Export backup all (.json)</a>
   <form method="post" action="{{ url_for('settings.import_backup') }}" enctype="multipart/form-data"
         class="d-flex gap-2"
-        onsubmit="return confirm('Importing replaces ALL sites, site regions, devices, interfaces, circuits, roles, map views, and settings with the contents of this file. This cannot be undone. Continue?');">
+        onsubmit="return confirm('Importing replaces ALL regions, sites, devices, interfaces, circuits, roles, map views, and settings with the contents of this file. This cannot be undone. Continue?');">
     <input type="hidden" name="scope" value="all">
     <input type="file" name="backup_file" accept="application/json" class="form-control" required>
     <button class="btn btn-outline-danger text-nowrap">Import backup all</button>
@@ -141,7 +141,7 @@
 <table class="table table-sm col-md-8">
   <thead><tr><th>Object</th><th>Export</th><th>Import</th></tr></thead>
   <tbody>
-    {% for scope, label in [('sites','Sites (incl. site regions)'), ('devices','Devices'), ('circuits','Circuits'), ('regions','Map views'), ('settings','Settings')] %}
+    {% for scope, label in [('sites','Regions/Sites'), ('devices','Devices'), ('circuits','Circuits'), ('regions','Map views'), ('settings','Settings')] %}
     <tr>
       <td>{{ label }}</td>
       <td><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('settings.export_backup', scope=scope) }}">Export</a></td>

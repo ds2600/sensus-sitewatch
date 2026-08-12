@@ -54,13 +54,10 @@ function sizeMapContainer() {
   el.style.height = Math.max(320, Math.round(window.innerHeight * 0.45)) + "px";
 }
 
-// Map view picker: a plain cookie, not a server round-trip, so a senior
-// manager who wants the whole picture and someone who only cares about one
-// region each just get whatever they last picked back on their next visit,
-// page to page. Two kinds of entry share the one dropdown/cookie value:
-// site regions ("sr-<id>", auto-fit to that region's member sites, always
-// current since it's computed from live data) and hand-saved views (the
-// MapRegion's own numeric id, jump to its stored lat/lon/zoom).
+// Map view picker (hand-saved MapRegion views, see Manage Map Views): a
+// plain cookie, not a server round-trip, so a senior manager who wants the
+// whole picture and someone who only cares about one view each just get
+// whatever they last picked back on their next visit, page to page.
 const REGION_COOKIE = "sitewatch_region";
 
 function getCookie(name) {
@@ -147,16 +144,6 @@ async function loadMap() {
       setCookie(REGION_COOKIE, regionSelect.value);
       if (regionSelect.value === "all") {
         fitToAllSites();
-        return;
-      }
-      if (regionSelect.value.startsWith("sr-")) {
-        const regionId = Number(regionSelect.value.slice(3));
-        const sites = data.sites.filter((s) => s.region_id === regionId);
-        if (sites.length > 0) {
-          map.fitBounds(L.latLngBounds(sites.map((s) => [s.lat, s.lon])), { padding: [60, 60], maxZoom: 11 });
-        } else {
-          fitToAllSites(); // region has no sites (yet) — nothing to bound to
-        }
         return;
       }
       const opt = regionSelect.selectedOptions[0];

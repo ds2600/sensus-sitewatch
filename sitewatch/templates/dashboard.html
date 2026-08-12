@@ -4,20 +4,9 @@
   <label class="form-label mb-0" for="region_select">Map view</label>
   <select class="form-select form-select-sm w-auto" id="region_select">
     <option value="all">All</option>
-    {% if site_regions %}
-    <optgroup label="Site regions">
-      {% for r in site_regions %}
-      <option value="sr-{{ r.id }}">{{ r.name }}</option>
-      {% endfor %}
-    </optgroup>
-    {% endif %}
-    {% if map_views %}
-    <optgroup label="Saved views">
-      {% for r in map_views %}
-      <option value="{{ r.id }}" data-lat="{{ r.center_lat }}" data-lon="{{ r.center_lon }}" data-zoom="{{ r.zoom }}">{{ r.name }}</option>
-      {% endfor %}
-    </optgroup>
-    {% endif %}
+    {% for r in map_views %}
+    <option value="{{ r.id }}" data-lat="{{ r.center_lat }}" data-lon="{{ r.center_lon }}" data-zoom="{{ r.zoom }}">{{ r.name }}</option>
+    {% endfor %}
   </select>
   <a href="{{ url_for('regions.manage_regions') }}" class="btn btn-outline-secondary btn-sm">Manage map views</a>
 </div>

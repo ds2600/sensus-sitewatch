@@ -14,7 +14,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 @api_bp.route("/map")
 @login_required
 def map_data():
-    sites = [{"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon, "region_id": s.region_id,
+    sites = [{"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
               "status": compute_site_status(s), "site_type": s.site_type} for s in Site.query.all()]
 
     lines = []
