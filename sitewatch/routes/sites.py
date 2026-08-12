@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
 from sitewatch.extensions import db
-from sitewatch.models import Site, Circuit
+from sitewatch.models import Site, Circuit, SITE_TYPES
 from sitewatch.status import compute_site_status
 
 sites_bp = Blueprint("sites", __name__, url_prefix="/sites")
@@ -20,10 +20,14 @@ def list_sites():
 @login_required
 def add_site():
     if request.method == "POST":
+        site_type = request.form.get("site_type", "site")
+        if site_type not in SITE_TYPES:
+            site_type = "site"
         site = Site(
             name=request.form["name"],
             lat=float(request.form["lat"]),
             lon=float(request.form["lon"]),
+            site_type=site_type,
             source="manual",
         )
         db.session.add(site)
@@ -37,9 +41,16 @@ def add_site():
 def edit_site(site_id):
     site = Site.query.get_or_404(site_id)
     if request.method == "POST":
+        site_type = request.form.get("site_type", "site")
+        if site_type not in SITE_TYPES:
+            site_type = "site"
+        if site_type == "passthrough" and site.devices:
+            flash("Can't mark a site as passthrough while it still has devices assigned. Remove or reassign them first.")
+            return redirect(url_for("sites.edit_site", site_id=site_id))
         site.name = request.form["name"]
         site.lat = float(request.form["lat"])
         site.lon = float(request.form["lon"])
+        site.site_type = site_type
         db.session.commit()
         return redirect(url_for("sites.site_detail", site_id=site.id))
     return render_template("site_form.html", site=site)
@@ -63,23 +74,14 @@ def site_detail(site_id):
     site = Site.query.get_or_404(site_id)
     status = compute_site_status(site)
 
-    intra_site_circuits = [
+    root_circuits = [
         c for c in Circuit.query.filter_by(parent_circuit_id=None).all()
-        if not c.is_bundle and c.is_intra_site and c.site_a_id_safe() == site_id
+        if c.site_a_id_safe() == site_id or c.site_b_id_safe() == site_id
     ]
-    external_circuits = [
-        c for c in Circuit.query.filter_by(parent_circuit_id=None).all()
-        if not c.is_intra_site and (c.site_a_id_safe() == site_id or c.site_b_id_safe() == site_id)
-        and _touches(c, site_id)
-    ]
+    intra_site_circuits = [c for c in root_circuits if c.is_intra_site]
+    external_circuits = [c for c in root_circuits if not c.is_intra_site]
     return render_template(
         "site_detail.html", site=site, status=status,
         devices=site.devices, intra_site_circuits=intra_site_circuits,
         external_circuits=external_circuits,
     )
-
-
-def _touches(circuit, site_id):
-    if circuit.is_bundle:
-        return any(_touches(c, site_id) for c in circuit.children)
-    return circuit.site_a_id_safe() == site_id or circuit.site_b_id_safe() == site_id

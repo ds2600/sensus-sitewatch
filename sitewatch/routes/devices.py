@@ -37,15 +37,20 @@ def list_devices():
 def add_device():
     if request.method == "POST":
         f = request.form
+        site = Site.query.get_or_404(int(f["site_id"]))
+        if site.site_type == "passthrough":
+            flash("Can't assign a device to a passthrough site — those are map waypoints with no equipment.")
+            return redirect(url_for("devices.add_device"))
         device = Device(
-            site_id=int(f["site_id"]), hostname=f["hostname"], mgmt_ip=f["mgmt_ip"],
+            site_id=site.id, hostname=f["hostname"], mgmt_ip=f["mgmt_ip"],
             vendor=f["vendor"], snmp_version=f["snmp_version"], source="manual",
         )
         _apply_credentials(device, f)
         db.session.add(device)
         db.session.commit()
         return redirect(url_for("devices.device_detail", device_id=device.id))
-    return render_template("device_form.html", device=None, sites=Site.query.all(),
+    return render_template("device_form.html", device=None,
+                            sites=Site.query.filter_by(site_type="site").all(),
                             vendors=VENDORS, snmp_versions=SNMP_VERSIONS)
 
 
@@ -62,7 +67,11 @@ def edit_device(device_id):
     device = Device.query.get_or_404(device_id)
     if request.method == "POST":
         f = request.form
-        device.site_id = int(f["site_id"])
+        site = Site.query.get_or_404(int(f["site_id"]))
+        if site.site_type == "passthrough":
+            flash("Can't assign a device to a passthrough site — those are map waypoints with no equipment.")
+            return redirect(url_for("devices.edit_device", device_id=device_id))
+        device.site_id = site.id
         device.hostname = f["hostname"]
         device.mgmt_ip = f["mgmt_ip"]
         device.vendor = f["vendor"]
@@ -70,7 +79,8 @@ def edit_device(device_id):
         _apply_credentials(device, f)
         db.session.commit()
         return redirect(url_for("devices.device_detail", device_id=device.id))
-    return render_template("device_form.html", device=device, sites=Site.query.all(),
+    return render_template("device_form.html", device=device,
+                            sites=Site.query.filter_by(site_type="site").all(),
                             vendors=VENDORS, snmp_versions=SNMP_VERSIONS)
 
 

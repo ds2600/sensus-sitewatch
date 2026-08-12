@@ -38,11 +38,17 @@ def recompute_bundle_state(bundle_circuit):
 
 
 def compute_site_status(site):
-    """Returns 'green' | 'yellow' | 'red' | 'blue'. Blue means every device
-    at the site is failing SNMP reachability — distinct from a confirmed
-    down circuit, since the site itself can't be assessed, not just one
-    of its links. Root circuits only count toward red/yellow (no parent) —
-    bundle members don't get counted twice against the site."""
+    """Returns 'green' | 'yellow' | 'red' | 'blue' | 'passthrough'. Blue means
+    every device at the site is failing SNMP reachability — distinct from a
+    confirmed down circuit, since the site itself can't be assessed, not just
+    one of its links. Root circuits only count toward red/yellow (no parent) —
+    bundle members don't get counted twice against the site.
+
+    Passthrough sites (site_type == 'passthrough') carry no equipment by
+    design, so there's nothing to poll or roll up — they're a map waypoint,
+    not a monitored location."""
+    if site.site_type == "passthrough":
+        return "passthrough"
     if site.devices and all(not d.reachable for d in site.devices):
         return "blue"
 

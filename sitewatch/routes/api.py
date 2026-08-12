@@ -12,7 +12,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 @login_required
 def map_data():
     sites = [{"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
-              "status": compute_site_status(s)} for s in Site.query.all()]
+              "status": compute_site_status(s), "site_type": s.site_type} for s in Site.query.all()]
 
     lines = []
     for c in Circuit.query.filter_by(parent_circuit_id=None).all():

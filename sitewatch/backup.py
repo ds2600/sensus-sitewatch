@@ -44,6 +44,7 @@ def export_data():
         "sites": [
             {
                 "id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
+                "site_type": s.site_type,
                 "netbox_id": s.netbox_id, "source": s.source,
             }
             for s in Site.query.all()
@@ -115,6 +116,7 @@ def _load(data):
     for s in data["sites"]:
         db.session.add(Site(
             id=s["id"], name=s["name"], lat=s["lat"], lon=s["lon"],
+            site_type=s.get("site_type", "site"),
             netbox_id=s.get("netbox_id"), source=s.get("source", "manual"),
             out_of_sync=False,
         ))

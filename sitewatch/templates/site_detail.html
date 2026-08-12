@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center">
-  <h4>{{ site.name }} <span class="badge bg-{{ 'success' if status=='green' else ('warning' if status=='yellow' else ('primary' if status=='blue' else 'danger')) }}">{{ status }}</span></h4>
+  <h4>{{ site.name }} <span class="badge bg-{{ 'success' if status=='green' else ('warning' if status=='yellow' else ('primary' if status=='blue' else ('dark' if status=='passthrough' else 'danger'))) }}">{{ status }}</span></h4>
   <div>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('sites.edit_site', site_id=site.id) }}">Edit</a>
     <form method="post" action="{{ url_for('sites.delete_site', site_id=site.id) }}" class="d-inline"
@@ -11,10 +11,15 @@
   </div>
 </div>
 
+{% if site.site_type == 'passthrough' %}
+<p class="text-muted mt-4">Passthrough location — a map waypoint with no equipment installed.</p>
+{% else %}
 <h5 class="mt-4">Devices</h5>
 <ul class="list-group mb-4">
   {% for d in devices %}
   <li class="list-group-item"><a href="{{ url_for('devices.device_detail', device_id=d.id) }}">{{ d.hostname }}</a> — {{ d.mgmt_ip }}</li>
+  {% else %}
+  <li class="list-group-item text-muted">None.</li>
   {% endfor %}
 </ul>
 
@@ -38,4 +43,5 @@
     {% else %}<tr><td class="text-muted">None.</td></tr>{% endfor %}
   </tbody>
 </table>
+{% endif %}
 {% endblock %}

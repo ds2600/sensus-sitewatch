@@ -13,6 +13,7 @@ VENDORS = ("ios-xe", "ios-xr", "junos")
 SOURCES = ("manual", "netbox")
 CIRCUIT_TIERS = ("critical", "auxiliary")
 CIRCUIT_STATES = ("up", "degraded", "down", "admin_down", "unreachable")
+SITE_TYPES = ("site", "passthrough")
 
 
 class User(UserMixin, db.Model):
@@ -73,6 +74,7 @@ class Site(db.Model):
     name = db.Column(db.String(120), nullable=False)
     lat = db.Column(db.Float, nullable=False)
     lon = db.Column(db.Float, nullable=False)
+    site_type = db.Column(db.String(20), default="site")  # site | passthrough — see SITE_TYPES
     netbox_id = db.Column(db.Integer, nullable=True)
     source = db.Column(db.String(20), default="manual")
     out_of_sync = db.Column(db.Boolean, default=False)
@@ -236,10 +238,12 @@ class Circuit(db.Model):
         return self.site_a_id_safe() == self.site_b_id_safe()
 
     def site_a_id_safe(self):
-        return self.interface_a.device.site_id if self.interface_a else None
+        site = self.site_a
+        return site.id if site else None
 
     def site_b_id_safe(self):
-        return self.interface_b.device.site_id if self.interface_b else None
+        site = self.site_b
+        return site.id if site else None
 
     @property
     def effective_capacity_bps(self):

@@ -7,7 +7,7 @@
     {% for s in sites %}
     <tr>
       <td><a href="{{ url_for('sites.site_detail', site_id=s.id) }}">{{ s.name }}</a></td>
-      <td><span class="badge bg-{{ 'success' if statuses[s.id]=='green' else ('warning' if statuses[s.id]=='yellow' else ('primary' if statuses[s.id]=='blue' else 'danger')) }}">{{ statuses[s.id] }}</span></td>
+      <td><span class="badge bg-{{ 'success' if statuses[s.id]=='green' else ('warning' if statuses[s.id]=='yellow' else ('primary' if statuses[s.id]=='blue' else ('dark' if statuses[s.id]=='passthrough' else 'danger'))) }}">{{ statuses[s.id] }}</span></td>
       <td>{{ s.source }}{% if s.out_of_sync %} <span class="badge bg-secondary">out of sync</span>{% endif %}</td>
       <td><a href="{{ url_for('sites.edit_site', site_id=s.id) }}">Edit</a></td>
     </tr>
