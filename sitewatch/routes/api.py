@@ -4,6 +4,7 @@ from flask_login import login_required
 
 from sitewatch.models import Site, Circuit, CircuitStatusHistory, AlertMute
 from sitewatch.status import compute_site_status
+from sitewatch.poller import get_poller_status
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -39,3 +40,9 @@ def alerts():
         "circuits": [{"id": h.circuit_id, "name": h.circuit.name, "since": h.started_at.isoformat()}
                      for h in unmuted],
     })
+
+
+@api_bp.route("/poller-status")
+@login_required
+def poller_status():
+    return jsonify(get_poller_status())

@@ -8,6 +8,7 @@ known to the DB.
 """
 from datetime import datetime, timedelta
 import logging
+import os
 import time
 
 from sitewatch.extensions import db, scheduler
@@ -19,6 +20,13 @@ from sitewatch.integrations.webhook_payload import send_down_alert
 
 log = logging.getLogger(__name__)
 
+POLLER_JOB_ID = "poll_all_devices"
+
+# Set for the duration of an actual sweep so get_poller_status() can tell
+# "waiting for next cycle" apart from "sweep in progress right now" —
+# APScheduler's job/next_run_time state alone doesn't capture that.
+_currently_polling = False
+
 
 def poll_all_devices():
     """One full sweep: every device polled in turn, synchronously, on a
@@ -26,17 +34,22 @@ def poll_all_devices():
     is recorded (Settings: last_poll_duration_seconds/last_poll_finished_at,
     shown on the Settings page) so the configured polling_interval_minutes
     can be checked against how long a sweep actually takes."""
-    started = time.monotonic()
-    device_count = 0
-    for device in Device.query.all():
-        _poll_device(device)
-        device_count += 1
-    _recompute_all_circuit_states()
-    duration = time.monotonic() - started
-    Setting.set("last_poll_duration_seconds", f"{duration:.1f}")
-    Setting.set("last_poll_finished_at", datetime.utcnow().isoformat())
-    db.session.commit()
-    log.info("Poll cycle finished in %.1fs (%d devices)", duration, device_count)
+    global _currently_polling
+    _currently_polling = True
+    try:
+        started = time.monotonic()
+        device_count = 0
+        for device in Device.query.all():
+            _poll_device(device)
+            device_count += 1
+        _recompute_all_circuit_states()
+        duration = time.monotonic() - started
+        Setting.set("last_poll_duration_seconds", f"{duration:.1f}")
+        Setting.set("last_poll_finished_at", datetime.utcnow().isoformat())
+        db.session.commit()
+        log.info("Poll cycle finished in %.1fs (%d devices)", duration, device_count)
+    finally:
+        _currently_polling = False
 
 
 def _poll_device(device):
@@ -154,6 +167,7 @@ def start_poller(app):
     with app.app_context():
         interval = Setting.query.get("polling_interval_minutes")
         minutes = int(interval.value) if interval else 2
+        enabled = Setting.get("poller_enabled", "1") != "0"
 
     def job():
         with app.app_context():
@@ -162,5 +176,45 @@ def start_poller(app):
             except Exception:
                 log.exception("Poll cycle failed")
 
-    scheduler.add_job(job, "interval", minutes=minutes, id="poll_all_devices", replace_existing=True)
+    scheduler.add_job(job, "interval", minutes=minutes, id=POLLER_JOB_ID, replace_existing=True)
     scheduler.start()
+    if not enabled:
+        # Restore whatever start/stop state was last set from the UI —
+        # otherwise a stopped poller would silently come back on restart.
+        scheduler.pause_job(POLLER_JOB_ID)
+
+
+def poller_enabled_for_process():
+    """Whether this process was launched with SITEWATCH_RUN_POLLER=1. The
+    scheduler and its job only exist at all when this is true — a process
+    started without it (e.g. `flask --app app run` for poking at routes)
+    has nothing to start/stop from the UI."""
+    return os.environ.get("SITEWATCH_RUN_POLLER") == "1"
+
+
+def pause_poller():
+    scheduler.pause_job(POLLER_JOB_ID)
+    Setting.set("poller_enabled", "0")
+    db.session.commit()
+
+
+def resume_poller():
+    scheduler.resume_job(POLLER_JOB_ID)
+    Setting.set("poller_enabled", "1")
+    db.session.commit()
+
+
+def get_poller_status():
+    """Status for the header icon and the Settings page. `state` is one of
+    disabled/stopped/waiting/polling; `active` is what the header icon's
+    play-vs-stop color should key off."""
+    if not poller_enabled_for_process():
+        return {"state": "disabled", "label": "Not running in this process", "active": False}
+    if not scheduler.running:
+        return {"state": "stopped", "label": "Stopped", "active": False}
+    job = scheduler.get_job(POLLER_JOB_ID)
+    if job is None or job.next_run_time is None:
+        return {"state": "stopped", "label": "Stopped", "active": False}
+    if _currently_polling:
+        return {"state": "polling", "label": "Polling now", "active": True}
+    return {"state": "waiting", "label": "Waiting for next cycle", "active": True}

@@ -8,6 +8,7 @@ from sitewatch.extensions import db
 from sitewatch.models import Setting, CircuitRole, Circuit
 from sitewatch.integrations import netbox
 from sitewatch.backup import export_data, import_data, BackupImportError
+from sitewatch.poller import get_poller_status, pause_poller, resume_poller, poller_enabled_for_process
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -27,7 +28,29 @@ def index():
         "finished_at": Setting.get("last_poll_finished_at"),
     }
     return render_template("settings.html", values=values, roles=CircuitRole.query.all(),
-                            poll_stats=poll_stats)
+                            poll_stats=poll_stats, poller_status=get_poller_status())
+
+
+@settings_bp.route("/poller/start", methods=["POST"])
+@login_required
+def poller_start():
+    if poller_enabled_for_process():
+        resume_poller()
+        flash("Poller started.")
+    else:
+        flash("This process was started without SITEWATCH_RUN_POLLER=1, so there's no poller here to start.")
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/poller/stop", methods=["POST"])
+@login_required
+def poller_stop():
+    if poller_enabled_for_process():
+        pause_poller()
+        flash("Poller stopped.")
+    else:
+        flash("This process was started without SITEWATCH_RUN_POLLER=1, so there's no poller here to stop.")
+    return redirect(url_for("settings.index"))
 
 
 @settings_bp.route("/roles/add", methods=["POST"])
