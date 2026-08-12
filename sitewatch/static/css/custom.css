@@ -6,16 +6,3 @@
 .status-red    { color: #dc3545; }
 .status-gray   { color: #6c757d; }
 .status-blue   { color: #0d6efd; }
-
-/* Full-screen block shown while a slow device operation (walk/repoll) is
-   in flight — see busy-overlay.js. */
-#busy-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-#busy-overlay.d-none { display: none; }

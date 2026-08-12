@@ -6,7 +6,7 @@ Full interface discovery (walk_interfaces) does NOT happen here — that's
 triggered manually per device. This loop only polls interfaces already
 known to the DB.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import os
 import time
@@ -41,15 +41,18 @@ def poll_all_devices():
         device_count = 0
         for device in Device.query.all():
             _poll_device(device)
-            # Commit after each device rather than once at the end of the
-            # whole sweep — SQLite only allows one writer at a time, so
-            # holding a single transaction open across every device (each
-            # doing a few synchronous SNMP GETs) can lock out a concurrent
-            # request — e.g. someone saving a device edit — for as long as
-            # the entire sweep takes, not just one device's worth.
+            # Recompute circuit/bundle state after every device, not once at
+            # the end of the whole sweep — otherwise a link that goes down on
+            # the very first device polled wouldn't show as down until every
+            # other device in the sweep finished too, which for a real
+            # multi-device deployment can be a long wait for what should be
+            # near-real-time. Commit here as well, both so the fresher state
+            # is actually visible to other requests right away and so SQLite
+            # doesn't hold one write transaction open for the whole sweep
+            # (see the "database is locked" fix — same reasoning applies).
+            _recompute_all_circuit_states()
             db.session.commit()
             device_count += 1
-        _recompute_all_circuit_states()
         duration = time.monotonic() - started
         Setting.set("last_poll_duration_seconds", f"{duration:.1f}")
         Setting.set("last_poll_finished_at", datetime.utcnow().isoformat())
@@ -68,7 +71,9 @@ def _poll_device(device):
     for iface in device.interfaces:
         try:
             data = telemetry.poll_interface_counters(device, iface)
-        except SnmpError:
+        except SnmpError as e:
+            log.info("Skipping %s (ifIndex %s) on %s this cycle: %s",
+                      iface.if_descr or f"ifIndex {iface.if_index}", iface.if_index, device.hostname, e)
             continue  # transient GET failure — leave stale, next poll will retry
 
         now = datetime.utcnow()
@@ -165,9 +170,12 @@ def poll_device_now(device):
     to one device's reachability/interfaces instead of waiting for the next
     cycle. Circuit/bundle states are recomputed across the board afterward
     since this device's interfaces may affect circuits touching other sites."""
+    log.info("Repolling %s (%s) — %d known interface(s)...",
+              device.hostname, device.mgmt_ip, len(device.interfaces))
     _poll_device(device)
     _recompute_all_circuit_states()
     db.session.commit()
+    log.info("Repoll of %s complete: %s.", device.hostname, "reachable" if device.reachable else "unreachable")
 
 
 def start_poller(app):
@@ -211,17 +219,42 @@ def resume_poller():
     db.session.commit()
 
 
+def reschedule_poller(minutes):
+    """Called from the Settings save route when polling_interval_minutes
+    changes. Without this, editing the setting only ever changed what
+    start_poller() would read on the *next* process restart — the live
+    APScheduler job kept running on whatever interval it was created with,
+    so the Settings page could say e.g. "every 2 minutes" while the actual
+    job was still firing every 10. reschedule_job() takes effect immediately
+    and preserves next_run_time semantics (fires next at the next multiple
+    of the new interval from the job's last run, not by resetting the clock)."""
+    if not poller_enabled_for_process() or not scheduler.running:
+        return
+    scheduler.reschedule_job(POLLER_JOB_ID, trigger="interval", minutes=minutes)
+
+
 def get_poller_status():
     """Status for the header icon and the Settings page. `state` is one of
     disabled/stopped/waiting/polling; `active` is what the header icon's
-    play-vs-stop color should key off."""
+    play-vs-stop color should key off. next_run_at lets the UI show exactly
+    when the next cycle is due instead of a vague "waiting"."""
     if not poller_enabled_for_process():
-        return {"state": "disabled", "label": "Not running in this process", "active": False}
+        return {"state": "disabled", "label": "Not running in this process", "active": False,
+                "next_run_at": None, "interval_minutes": None}
     if not scheduler.running:
-        return {"state": "stopped", "label": "Stopped", "active": False}
+        return {"state": "stopped", "label": "Stopped", "active": False,
+                "next_run_at": None, "interval_minutes": None}
     job = scheduler.get_job(POLLER_JOB_ID)
+    interval_minutes = Setting.get_int("polling_interval_minutes")
     if job is None or job.next_run_time is None:
-        return {"state": "stopped", "label": "Stopped", "active": False}
+        return {"state": "stopped", "label": "Stopped", "active": False,
+                "next_run_at": None, "interval_minutes": interval_minutes}
+    # APScheduler's next_run_time is tz-aware in the local system timezone;
+    # normalize to UTC to match last_poll_finished_at's naive-UTC format
+    # elsewhere on the Settings page.
+    next_run_at = job.next_run_time.astimezone(timezone.utc).isoformat()
     if _currently_polling:
-        return {"state": "polling", "label": "Polling now", "active": True}
-    return {"state": "waiting", "label": "Waiting for next cycle", "active": True}
+        return {"state": "polling", "label": "Polling now", "active": True,
+                "next_run_at": next_run_at, "interval_minutes": interval_minutes}
+    return {"state": "waiting", "label": "Waiting for next cycle", "active": True,
+            "next_run_at": next_run_at, "interval_minutes": interval_minutes}

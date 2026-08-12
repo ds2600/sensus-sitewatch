@@ -43,13 +43,28 @@
   <!-- Drop an mp3 at sitewatch/static/sound/alert.mp3 and set the src below to enable the ding -->
   <audio id="alert-sound"></audio>
 
-  <!-- Shown by busy-overlay.js while a form with class="js-blocking-form" is submitting
-       (e.g. device walk/repoll) so a slow SNMP round-trip can't be interrupted by a
-       stray click or double-submit. -->
-  <div id="busy-overlay" class="d-none">
-    <div class="text-center">
-      <div class="spinner-border text-light" role="status"></div>
-      <div id="busy-overlay-text" class="mt-3 text-light"></div>
+  <!-- Driven by job-modal.js: any button with data-job-url POSTs there to kick off a
+       background job (device walk/repoll), then tails /api/jobs/<id>/log here live.
+       Not dismissible (no backdrop/ESC close) until the job reports done — see
+       job-modal.js for why: this is standing in for the request that used to block
+       synchronously, so closing early would be misleading, not just inconvenient. -->
+  <div class="modal" id="job-log-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="job-log-title">Working&hellip;</h5>
+          <span id="job-log-elapsed" class="text-body-secondary small ms-2"></span>
+          <button type="button" class="btn-close ms-auto" id="job-log-close-x" aria-label="Close" style="display:none;"></button>
+        </div>
+        <div class="modal-body">
+          <pre id="job-log-lines" class="bg-dark text-light p-3 rounded mb-0"
+               style="height:50vh; overflow-y:auto; font-size:0.8rem; white-space:pre-wrap;"></pre>
+        </div>
+        <div class="modal-footer">
+          <span id="job-log-status" class="me-auto"></span>
+          <button type="button" class="btn btn-secondary" id="job-log-close-btn" disabled>Close</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -57,7 +72,7 @@
   {% if current_user.is_authenticated %}
   <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
   <script src="{{ url_for('static', filename='js/poller-status.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/busy-overlay.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/job-modal.js') }}"></script>
   {% endif %}
   {% block scripts %}{% endblock %}
 </body>

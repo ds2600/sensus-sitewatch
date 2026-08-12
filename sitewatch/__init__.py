@@ -19,6 +19,9 @@ def create_app():
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
 
+    from sitewatch import job_log
+    job_log.install()
+
     from sitewatch.models import User
 
     @login_manager.user_loader

@@ -17,14 +17,12 @@
   Last polled: {{ device.last_polled_at or 'never' }} |
   Last walked: {{ device.last_walked_at or 'never' }}
 </p>
-<form method="post" action="{{ url_for('devices.repoll_device', device_id=device.id) }}"
-      class="d-inline js-blocking-form" data-busy-text="Repolling {{ device.hostname }}…">
-  <button class="btn btn-outline-primary">Repoll now</button>
-</form>
-<form method="post" action="{{ url_for('devices.walk_device', device_id=device.id) }}"
-      class="d-inline mb-3 js-blocking-form" data-busy-text="Walking {{ device.hostname }} — discovering interfaces…">
-  <button class="btn btn-outline-secondary">Walk now</button>
-</form>
+<div class="mb-3">
+  <button type="button" class="btn btn-outline-primary" data-job-url="{{ url_for('devices.repoll_device', device_id=device.id) }}"
+          data-job-label="Repolling {{ device.hostname }}">Repoll now</button>
+  <button type="button" class="btn btn-outline-secondary" data-job-url="{{ url_for('devices.walk_device', device_id=device.id) }}"
+          data-job-label="Walking {{ device.hostname }}">Walk now</button>
+</div>
 
 <table class="table table-sm">
   <thead><tr><th>Index</th><th>Descr</th><th>Alias</th><th>Speed</th><th>Oper</th><th>Admin</th><th>In</th><th>Out</th><th>Util</th></tr></thead>

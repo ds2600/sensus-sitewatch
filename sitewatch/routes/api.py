@@ -1,10 +1,11 @@
 """JSON endpoints for the map and the in-browser alert widget."""
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_login import login_required
 
 from sitewatch.models import Site, Circuit, CircuitStatusHistory, AlertMute
 from sitewatch.status import compute_site_status
 from sitewatch.poller import get_poller_status
+from sitewatch import job_log
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -46,3 +47,16 @@ def alerts():
 @login_required
 def poller_status():
     return jsonify(get_poller_status())
+
+
+@api_bp.route("/jobs/<job_id>/log")
+@login_required
+def job_log_tail(job_id):
+    """Polled by the walk/repoll modal. `since` is the next_index from the
+    previous response — lets the client fetch only new lines each tick
+    instead of re-sending the whole log."""
+    since = request.args.get("since", 0, type=int)
+    job = job_log.get_job(job_id, since=since)
+    if job is None:
+        return jsonify({"error": "Job not found or expired."}), 404
+    return jsonify(job)

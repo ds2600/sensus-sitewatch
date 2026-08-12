@@ -8,7 +8,9 @@ from sitewatch.extensions import db
 from sitewatch.models import Setting, CircuitRole, Circuit
 from sitewatch.integrations import netbox
 from sitewatch.backup import export_data, import_data, BackupImportError
-from sitewatch.poller import get_poller_status, pause_poller, resume_poller, poller_enabled_for_process
+from sitewatch.poller import (
+    get_poller_status, pause_poller, resume_poller, poller_enabled_for_process, reschedule_poller,
+)
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -17,10 +19,15 @@ settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
 @login_required
 def index():
     if request.method == "POST":
+        old_interval = Setting.get("polling_interval_minutes")
         for key in Setting.DEFAULTS:
             if key in request.form:
                 Setting.set(key, request.form[key])
         db.session.commit()
+        new_interval = request.form.get("polling_interval_minutes")
+        if new_interval and new_interval != old_interval:
+            reschedule_poller(int(new_interval))
+            flash(f"Polling interval changed to every {new_interval} minute(s) — takes effect immediately.")
         return redirect(url_for("settings.index"))
     values = {k: Setting.get(k) for k in Setting.DEFAULTS}
     poll_stats = {

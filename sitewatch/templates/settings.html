@@ -14,6 +14,7 @@
       No poll cycle has completed yet.
       {% endif %}
       Poller is currently <strong>{{ poller_status.label|lower }}</strong>.
+      <span id="settings-poller-next-run" data-next-run="{{ poller_status.next_run_at or '' }}"></span>
     </div>
   </div>
   <div class="mb-3"><label class="form-label">Down threshold (consecutive failed polls)</label>
@@ -29,10 +30,14 @@
 
 <h5 id="poller">Poller</h5>
 <div class="col-md-6 mb-5">
-  <p>
+  <p class="mb-1">
     Status:
     <span class="badge {{ 'bg-success' if poller_status.active else 'bg-danger' }}">{{ poller_status.label }}</span>
+    {% if poller_status.interval_minutes %}
+    <span class="text-body-secondary">— every {{ poller_status.interval_minutes }} minute(s)</span>
+    {% endif %}
   </p>
+  <p class="mb-2" id="poller-next-run" data-next-run="{{ poller_status.next_run_at or '' }}"></p>
   {% if poller_status.state == 'disabled' %}
   <div class="form-text">
     This process was started without <code>SITEWATCH_RUN_POLLER=1</code>, so there's

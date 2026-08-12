@@ -1,11 +1,13 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+import threading
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required
 
 from sitewatch.extensions import db
 from sitewatch.models import Device, Site, Circuit, VENDORS, SNMP_VERSIONS
-from sitewatch.snmp import SnmpError
 from sitewatch.discovery import perform_walk
 from sitewatch.poller import poll_device_now
+from sitewatch import job_log
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
 
@@ -101,39 +103,52 @@ def delete_device(device_id):
     return redirect(url_for("devices.list_devices"))
 
 
+def _run_in_background(job_id, work):
+    """Starts work() (no args) on a daemon thread with this request's app
+    bound, its log output routed into job_id (see job_log.py). The route
+    that called this returns immediately with job_id for the browser to
+    poll — walk/repoll take multiple seconds of real SNMP round-trips, long
+    enough that blocking the request for it forces a bare spinner with no
+    visibility into what's actually happening or stuck."""
+    app = current_app._get_current_object()
+    threading.Thread(target=job_log.run_job, args=(job_id, work, app), daemon=True).start()
+
+
 @devices_bp.route("/<int:device_id>/walk", methods=["POST"])
 @login_required
 def walk_device(device_id):
     device = Device.query.get_or_404(device_id)
-    try:
-        count = perform_walk(device)
-    except SnmpError as e:
-        flash(f"Walk failed: {e}")
-        return redirect(url_for("devices.device_detail", device_id=device_id))
+    hostname = device.hostname
+    job_id = job_log.start_job(f"Walking {hostname}")
 
-    db.session.commit()
-    flash(f"Walk complete: {count} interfaces found.")
-    return redirect(url_for("devices.device_detail", device_id=device_id))
+    def work():
+        d = Device.query.get_or_404(device_id)
+        perform_walk(d)
+        db.session.commit()
+
+    _run_in_background(job_id, work)
+    return jsonify({"job_id": job_id, "label": f"Walking {hostname}",
+                     "redirect": url_for("devices.device_detail", device_id=device_id)})
 
 
 @devices_bp.route("/<int:device_id>/repoll", methods=["POST"])
 @login_required
 def repoll_device(device_id):
     device = Device.query.get_or_404(device_id)
-    try:
-        poll_device_now(device)
-    except SnmpError as e:
-        flash(f"Repoll failed: {e}")
-        return redirect(url_for("devices.device_detail", device_id=device_id))
+    hostname = device.hostname
+    job_id = job_log.start_job(f"Repolling {hostname}")
 
-    if not device.reachable and not _has_snmp_credentials(device):
-        flash(f"Repoll complete — {device.hostname} is unreachable: no SNMP credentials "
-              f"configured. Set them on the Edit page (devices imported from NetBox never "
-              f"carry credentials — they must be entered manually).")
-    else:
-        flash(f"Repoll complete — {device.hostname} is now "
-              f"{'reachable' if device.reachable else 'still unreachable'}.")
-    return redirect(url_for("devices.device_detail", device_id=device_id))
+    def work():
+        d = Device.query.get_or_404(device_id)
+        poll_device_now(d)
+        if not d.reachable and not _has_snmp_credentials(d):
+            job_log.log_line(job_id,
+                f"NOTE: {hostname} has no SNMP credentials configured — set them on the Edit "
+                f"page (devices imported from NetBox never carry credentials).")
+
+    _run_in_background(job_id, work)
+    return jsonify({"job_id": job_id, "label": f"Repolling {hostname}",
+                     "redirect": url_for("devices.device_detail", device_id=device_id)})
 
 
 def _has_snmp_credentials(device):

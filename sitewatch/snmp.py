@@ -3,7 +3,15 @@
 Written against pysnmp 4.4.x hlapi (see requirements.txt pin). If you
 upgrade pysnmp, this module is the one place that needs rework — the
 v6.x API replaces these calls with an async style.
+
+Every GET/WALK logs at INFO — this is deliberately chatty. It's what feeds
+the live log tail in the walk/repoll modal (see job_log.py): each line here
+is a real wire-level operation (target, OID, outcome, timing), not a
+generic "polling device..." status message.
 """
+import logging
+import time
+
 from pysnmp.error import PySnmpError
 from pysnmp.proto.rfc1905 import NoSuchInstance, NoSuchObject, EndOfMibView
 from pysnmp.hlapi import (
@@ -18,6 +26,27 @@ from pysnmp.hlapi import (
 # that don't check for these end up trying to int()/str() a sentinel object
 # (e.g. NoSuchInstance stringifies to '', which crashes int('')).
 _MISSING_VALUE_TYPES = (NoSuchInstance, NoSuchObject, EndOfMibView)
+
+log = logging.getLogger(__name__)
+
+# Human-readable names for the OIDs this module ever queries, purely for
+# log output — falls back to the raw OID for anything not in this table.
+_OID_NAMES = {
+    "1.3.6.1.2.1.1.3.0": "sysUpTime",
+    "1.3.6.1.2.1.2.2.1.2": "ifDescr",
+    "1.3.6.1.2.1.31.1.1.1.18": "ifAlias",
+    "1.3.6.1.2.1.2.2.1.5": "ifSpeed",
+    "1.3.6.1.2.1.2.2.1.8": "ifOperStatus",
+    "1.3.6.1.2.1.2.2.1.7": "ifAdminStatus",
+    "1.3.6.1.2.1.31.1.1.1.6": "ifHCInOctets",
+    "1.3.6.1.2.1.31.1.1.1.10": "ifHCOutOctets",
+}
+
+
+def _oid_label(oid):
+    base = oid.rsplit(".", 1)[0] if oid[-1].isdigit() and oid not in _OID_NAMES else oid
+    name = _OID_NAMES.get(oid) or _OID_NAMES.get(base)
+    return f"{name} ({oid})" if name else oid
 
 # IF-MIB OIDs used throughout the app
 OID_SYS_UPTIME = "1.3.6.1.2.1.1.3.0"
@@ -55,6 +84,9 @@ def _auth_data(device):
 
 
 def snmp_get(device, oid, timeout=3, retries=1):
+    t0 = time.monotonic()
+    log.info("GET %s from %s (%s, timeout=%ss retries=%s)",
+              _oid_label(oid), device.mgmt_ip, device.snmp_version, timeout, retries)
     engine = SnmpEngine()
     iterator = getCmd(
         engine, _auth_data(device), UdpTransportTarget((device.mgmt_ip, 161), timeout=timeout, retries=retries),
@@ -67,18 +99,25 @@ def snmp_get(device, oid, timeout=3, retries=1):
         # which never carries SNMP credentials) surface here as pysnmp
         # internals, not as error_indication — normalize to SnmpError so
         # every caller only has one exception type to handle.
+        log.info("  -> FAILED after %.2fs: %s", time.monotonic() - t0, e)
         raise SnmpError(str(e)) from e
     if error_indication or error_status:
+        log.info("  -> FAILED after %.2fs: %s", time.monotonic() - t0, error_indication or error_status)
         raise SnmpError(str(error_indication or error_status))
     value = var_binds[0][1]
     if isinstance(value, _MISSING_VALUE_TYPES):
+        log.info("  -> no such instance (%.2fs)", time.monotonic() - t0)
         raise SnmpError(f"{oid} not present on this device (no such instance).")
+    log.info("  -> %s (%.2fs)", value, time.monotonic() - t0)
     return value
 
 
 def snmp_walk(device, base_oid, timeout=3, retries=1):
     """Returns list of (index, value) tuples, index parsed as int from the
     trailing OID component."""
+    t0 = time.monotonic()
+    log.info("WALK %s from %s (%s, timeout=%ss retries=%s)",
+              _oid_label(base_oid), device.mgmt_ip, device.snmp_version, timeout, retries)
     engine = SnmpEngine()
     results = []
     iterator = nextCmd(
@@ -88,6 +127,7 @@ def snmp_walk(device, base_oid, timeout=3, retries=1):
     try:
         for error_indication, error_status, _, var_binds in iterator:
             if error_indication or error_status:
+                log.info("  -> FAILED after %.2fs: %s", time.monotonic() - t0, error_indication or error_status)
                 raise SnmpError(str(error_indication or error_status))
             for oid, value in var_binds:
                 if isinstance(value, _MISSING_VALUE_TYPES):
@@ -95,15 +135,20 @@ def snmp_walk(device, base_oid, timeout=3, retries=1):
                 index = int(str(oid).split(".")[-1])
                 results.append((index, value))
     except PySnmpError as e:
+        log.info("  -> FAILED after %.2fs: %s", time.monotonic() - t0, e)
         raise SnmpError(str(e)) from e
+    log.info("  -> %d result(s) (%.2fs)", len(results), time.monotonic() - t0)
     return results
 
 
 def check_reachable(device):
+    log.info("Checking reachability of %s (%s)...", device.hostname, device.mgmt_ip)
     try:
         snmp_get(device, OID_SYS_UPTIME)
+        log.info("%s is reachable.", device.hostname)
         return True
-    except SnmpError:
+    except SnmpError as e:
+        log.info("%s is unreachable: %s", device.hostname, e)
         return False
 
 
@@ -124,6 +169,7 @@ def walk_interfaces(device):
             "oper_status": "up" if str(oper.get(idx)) == "1" else "down",
             "admin_status": "up" if str(admin.get(idx)) == "1" else "down",
         }
+    log.info("Discovered %d interface(s) on %s.", len(out), device.hostname)
     return out
 
 
