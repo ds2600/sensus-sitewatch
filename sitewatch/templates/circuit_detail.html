@@ -33,10 +33,21 @@
 <p class="mb-4">Capacity {{ capacity | bps }} / {{ util_pct(circuit.current_in_bps, circuit.current_out_bps, capacity) }}</p>
 
 {% if circuit.is_bundle %}
-<div class="d-flex align-items-center gap-2">
+<div class="d-flex align-items-center gap-2 mb-2">
   <h5 class="mb-0">Members</h5>
   <a class="btn btn-outline-primary btn-sm" href="{{ url_for('circuits.add_circuit', parent_id=circuit.id) }}">Add member circuit</a>
 </div>
+{% if attachable_circuits %}
+<form method="post" action="{{ url_for('circuits.attach_member', circuit_id=circuit.id) }}" class="d-flex gap-2 col-md-6 mb-3">
+  <div class="dropdown flex-grow-1">
+    <input class="form-control form-control-sm" id="attach_member_search" placeholder="Search existing circuit…" autocomplete="off">
+    <ul class="dropdown-menu search-menu w-100" id="attach_member_menu"></ul>
+  </div>
+  <input type="hidden" name="member_circuit_id" id="attach_member_id">
+  <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">Attach existing circuit</button>
+  <script id="attachable-circuits-data" type="application/json">{{ attachable_circuits | tojson }}</script>
+</form>
+{% endif %}
 <table class="table table-sm mb-3">
   <thead><tr><th>Name</th><th>State</th><th>Capacity</th><th>Traffic</th><th>Util</th></tr></thead>
   <tbody>
@@ -72,3 +83,27 @@
 </form>
 {% endif %}
 {% endblock %}
+
+{% if attachable_circuits %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/searchable_select.js') }}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const options = JSON.parse(document.getElementById("attachable-circuits-data").textContent);
+  const hidden = document.getElementById("attach_member_id");
+  searchableSelect({
+    input: document.getElementById("attach_member_search"),
+    hidden: hidden,
+    menu: document.getElementById("attach_member_menu"),
+    options: options,
+  });
+  document.getElementById("attach_member_id").closest("form").addEventListener("submit", (e) => {
+    if (!hidden.value) {
+      e.preventDefault();
+      alert("Pick a circuit from the list.");
+    }
+  });
+});
+</script>
+{% endblock %}
+{% endif %}

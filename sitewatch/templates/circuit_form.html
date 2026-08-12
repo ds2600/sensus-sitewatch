@@ -47,8 +47,10 @@
     <label class="form-check-label" for="is_bundle">Bundle (no interfaces of its own)</label>
   </div>
   <div id="leaf-fields" class="{{ 'd-none' if duplicate_source and duplicate_source.is_bundle }}">
+    {% set pre_device_a_label = (prefill_device_a.hostname ~ " (" ~ prefill_device_a.site.name ~ ")") if prefill_device_a else "" %}
+    {% set pre_device_b_label = (prefill_device_b.hostname ~ " (" ~ prefill_device_b.site.name ~ ")") if prefill_device_b else "" %}
+    {% set pre_iface_label = "" %}
     {% if preselected_interface_a %}
-    {% set pre_device_label = preselected_interface_a.device.hostname ~ " (" ~ preselected_interface_a.device.site.name ~ ")" %}
     {% set pre_iface_label = preselected_interface_a.if_descr or ("ifIndex " ~ preselected_interface_a.if_index) %}
     {% if preselected_interface_a.if_alias %}{% set pre_iface_label = pre_iface_label ~ " — " ~ preselected_interface_a.if_alias %}{% endif %}
     {% endif %}
@@ -57,14 +59,14 @@
         <div class="mb-3"><label class="form-label">Interface A — device</label>
           <div class="dropdown">
             <input class="form-control" id="device_a_search" placeholder="Search device…" autocomplete="off"
-                   value="{{ pre_device_label if preselected_interface_a else '' }}">
+                   value="{{ pre_device_a_label }}">
             <ul class="dropdown-menu search-menu w-100" id="device_a_menu"></ul>
           </div>
         </div>
         <div class="mb-3"><label class="form-label">Interface A — interface</label>
           <div class="dropdown">
             <input class="form-control" id="interface_a_search" placeholder="Pick a device first" autocomplete="off"
-                   value="{{ pre_iface_label if preselected_interface_a else '' }}" {{ 'disabled' if not preselected_interface_a }}>
+                   value="{{ pre_iface_label }}" {{ 'disabled' if not (preselected_interface_a or prefill_device_a) }}>
             <ul class="dropdown-menu search-menu interface-menu" id="interface_a_menu"></ul>
           </div>
           <input type="hidden" name="interface_a_id" id="interface_a_id" value="{{ preselected_interface_a.id if preselected_interface_a else '' }}">
@@ -73,13 +75,15 @@
       <div class="col-6">
         <div class="mb-3"><label class="form-label">Interface B — device</label>
           <div class="dropdown">
-            <input class="form-control" id="device_b_search" placeholder="Search device…" autocomplete="off">
+            <input class="form-control" id="device_b_search" placeholder="Search device…" autocomplete="off"
+                   value="{{ pre_device_b_label }}">
             <ul class="dropdown-menu search-menu w-100" id="device_b_menu"></ul>
           </div>
         </div>
         <div class="mb-3"><label class="form-label">Interface B — interface</label>
           <div class="dropdown">
-            <input class="form-control" id="interface_b_search" placeholder="Pick a device first" autocomplete="off" disabled>
+            <input class="form-control" id="interface_b_search" placeholder="Pick a device first" autocomplete="off"
+                   {{ 'disabled' if not prefill_device_b }}>
             <ul class="dropdown-menu search-menu interface-menu" id="interface_b_menu"></ul>
           </div>
           <input type="hidden" name="interface_b_id" id="interface_b_id">

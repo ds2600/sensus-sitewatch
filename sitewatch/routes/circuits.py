@@ -115,11 +115,28 @@ def add_circuit():
     # "Duplicate" (circuit_detail.html): prefills name/role/parent/capacity/
     # waypoints from an existing circuit as a starting point — deliberately
     # NOT its interfaces, since two circuits can't actually share an
-    # endpoint. Leaf-fields stay blank/editable same as a plain Add.
+    # endpoint. The DEVICES do mirror over though (interface pickers land
+    # already scoped to the source's devices, interface itself left for a
+    # fresh pick) — saves re-searching for the same device on both ends
+    # when the new circuit is, as usual, another link off the same gear.
     duplicate_id = request.args.get("duplicate_id", type=int)
     duplicate_source = Circuit.query.get(duplicate_id) if duplicate_id else None
     existing_waypoints = ([{"id": w.site_id, "label": w.site.name} for w in duplicate_source.waypoints]
                            if duplicate_source else [])
+
+    prefill_device_a = preselected_interface_a.device if preselected_interface_a else None
+    prefill_device_b = None
+    if duplicate_source and not duplicate_source.is_bundle:
+        if not prefill_device_a and duplicate_source.interface_a:
+            prefill_device_a = duplicate_source.interface_a.device
+        if duplicate_source.interface_b:
+            prefill_device_b = duplicate_source.interface_b.device
+    prefill_lag_device_a = prefill_lag_device_b = None
+    if duplicate_source and duplicate_source.is_bundle:
+        if duplicate_source.lag_interface_a:
+            prefill_lag_device_a = duplicate_source.lag_interface_a.device
+        if duplicate_source.lag_interface_b:
+            prefill_lag_device_b = duplicate_source.lag_interface_b.device
 
     return render_template(
         "circuit_form.html",
@@ -128,6 +145,8 @@ def add_circuit():
                                 or (duplicate_source.parent_circuit_id if duplicate_source else None)),
         preselected_interface_a=preselected_interface_a,
         duplicate_source=duplicate_source, existing_waypoints=existing_waypoints,
+        prefill_device_a=prefill_device_a, prefill_device_b=prefill_device_b,
+        prefill_lag_device_a=prefill_lag_device_a, prefill_lag_device_b=prefill_lag_device_b,
         **_form_options(),
     )
 
@@ -137,7 +156,30 @@ def add_circuit():
 def circuit_detail(circuit_id):
     circuit = Circuit.query.get_or_404(circuit_id)
     is_muted = AlertMute.is_muted(circuit_id)
-    return render_template("circuit_detail.html", circuit=circuit, is_muted=is_muted)
+    # Only unparented circuits — this is for attaching a standalone circuit
+    # someone already built, not for stealing one away from another bundle
+    # (Edit's own Parent bundle field already covers that, deliberately).
+    attachable_circuits = (
+        [{"id": c.id, "label": c.name}
+         for c in Circuit.query.filter_by(parent_circuit_id=None).filter(Circuit.id != circuit.id).all()]
+        if circuit.is_bundle else []
+    )
+    return render_template("circuit_detail.html", circuit=circuit, is_muted=is_muted,
+                            attachable_circuits=attachable_circuits)
+
+
+@circuits_bp.route("/<int:circuit_id>/attach-member", methods=["POST"])
+@login_required
+def attach_member(circuit_id):
+    bundle = Circuit.query.get_or_404(circuit_id)
+    member_id = request.form.get("member_circuit_id", type=int)
+    member = Circuit.query.get(member_id) if member_id else None
+    if not member or member.id == bundle.id or member.parent_circuit_id is not None:
+        flash("Pick an existing, unattached circuit.")
+        return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
+    member.parent_circuit_id = bundle.id
+    db.session.commit()
+    return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
 
 
 @circuits_bp.route("/<int:circuit_id>/edit", methods=["GET", "POST"])
