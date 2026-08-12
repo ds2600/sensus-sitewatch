@@ -10,6 +10,7 @@
   <h4 class="mb-0">{{ circuit.name }}</h4>
   <span class="badge bg-secondary">{{ circuit.current_state }}</span>
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('circuits.edit_circuit', circuit_id=circuit.id) }}">Edit</a>
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('circuits.add_circuit', duplicate_id=circuit.id) }}">Duplicate</a>
   <form method="post" action="{{ url_for('circuits.delete_circuit', circuit_id=circuit.id) }}" class="d-inline"
         onsubmit="return confirm('Delete {{ circuit.name }}? This cannot be undone.');">
     <button class="btn btn-outline-danger btn-sm">Delete</button>

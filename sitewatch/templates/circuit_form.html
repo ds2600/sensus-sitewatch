@@ -1,22 +1,26 @@
 {% extends "base.html" %}
 {% from "_macros.html" import breadcrumb %}
 {% block content %}
+{% set prefill = circuit or duplicate_source %}
 {% set effective_parent_id_bc = circuit.parent_circuit_id if circuit else preselected_parent_id %}
 {% set effective_parent_bc = (bundles_for_form | selectattr('id', 'equalto', effective_parent_id_bc) | first) if effective_parent_id_bc else none %}
 {% set crumbs = [("Circuits", url_for('circuits.list_circuits'))] %}
 {% if effective_parent_bc %}{% set crumbs = crumbs + [(effective_parent_bc.label, url_for('circuits.circuit_detail', circuit_id=effective_parent_bc.id))] %}{% endif %}
 {{ breadcrumb(crumbs + [('Edit ' ~ circuit.name if circuit else 'Add circuit', none)]) }}
 <h4>{{ 'Edit circuit' if circuit else 'Add circuit' }}</h4>
+{% if duplicate_source %}<p class="text-body-secondary small">Starting from "{{ duplicate_source.name }}" — pick new interfaces below.</p>{% endif %}
 <form method="post" class="col-md-6">
-  <div class="mb-3"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ circuit.name if circuit else '' }}" required></div>
+  <div class="mb-3"><label class="form-label">Name</label>
+    <input class="form-control" name="name"
+           value="{{ circuit.name if circuit else (duplicate_source.name ~ ' (copy)' if duplicate_source else '') }}" required></div>
 
   <div class="mb-3"><label class="form-label">Role</label>
     <div class="dropdown">
       <input class="form-control" id="role_search" placeholder="Search role…" autocomplete="off"
-             value="{{ (roles_for_form | selectattr('id', 'equalto', circuit.role_id) | first).label if circuit else '' }}" required>
+             value="{{ (roles_for_form | selectattr('id', 'equalto', prefill.role_id) | first).label if prefill else '' }}" required>
       <ul class="dropdown-menu search-menu w-100" id="role_menu"></ul>
     </div>
-    <input type="hidden" name="role_id" id="role_id" value="{{ circuit.role_id if circuit else '' }}">
+    <input type="hidden" name="role_id" id="role_id" value="{{ prefill.role_id if prefill else '' }}">
     <script id="roles-data" type="application/json">{{ roles_for_form | tojson }}</script>
   </div>
 
@@ -37,11 +41,12 @@
   {% if not circuit %}
   <div class="form-check mb-3">
     <input class="form-check-input" type="checkbox" name="is_bundle" id="is_bundle"
+           {{ 'checked' if duplicate_source and duplicate_source.is_bundle }}
            onchange="document.getElementById('leaf-fields').classList.toggle('d-none', this.checked);
                      document.getElementById('bundle-fields').classList.toggle('d-none', !this.checked);">
     <label class="form-check-label" for="is_bundle">Bundle (no interfaces of its own)</label>
   </div>
-  <div id="leaf-fields">
+  <div id="leaf-fields" class="{{ 'd-none' if duplicate_source and duplicate_source.is_bundle }}">
     {% if preselected_interface_a %}
     {% set pre_device_label = preselected_interface_a.device.hostname ~ " (" ~ preselected_interface_a.device.site.name ~ ")" %}
     {% set pre_iface_label = preselected_interface_a.if_descr or ("ifIndex " ~ preselected_interface_a.if_index) %}
@@ -60,7 +65,7 @@
           <div class="dropdown">
             <input class="form-control" id="interface_a_search" placeholder="Pick a device first" autocomplete="off"
                    value="{{ pre_iface_label if preselected_interface_a else '' }}" {{ 'disabled' if not preselected_interface_a }}>
-            <ul class="dropdown-menu search-menu w-100" id="interface_a_menu"></ul>
+            <ul class="dropdown-menu search-menu interface-menu" id="interface_a_menu"></ul>
           </div>
           <input type="hidden" name="interface_a_id" id="interface_a_id" value="{{ preselected_interface_a.id if preselected_interface_a else '' }}">
         </div>
@@ -75,14 +80,14 @@
         <div class="mb-3"><label class="form-label">Interface B — interface</label>
           <div class="dropdown">
             <input class="form-control" id="interface_b_search" placeholder="Pick a device first" autocomplete="off" disabled>
-            <ul class="dropdown-menu search-menu w-100" id="interface_b_menu"></ul>
+            <ul class="dropdown-menu search-menu interface-menu" id="interface_b_menu"></ul>
           </div>
           <input type="hidden" name="interface_b_id" id="interface_b_id">
         </div>
       </div>
     </div>
   </div>
-  <div id="bundle-fields" class="d-none">
+  <div id="bundle-fields" class="{{ '' if duplicate_source and duplicate_source.is_bundle else 'd-none' }}">
     {% include "_lag_interface_fields.html" %}
   </div>
   {% else %}
@@ -99,7 +104,7 @@
   {% endif %}
 
   <div class="mb-3"><label class="form-label">Capacity override (bps, optional)</label>
-    <input class="form-control" name="capacity_override" value="{{ circuit.capacity_bps_override if circuit and circuit.capacity_bps_override else '' }}">
+    <input class="form-control" name="capacity_override" value="{{ prefill.capacity_bps_override if prefill and prefill.capacity_bps_override else '' }}">
   </div>
 
   <div class="mb-3">
@@ -115,7 +120,7 @@
     <ol class="list-group" id="waypoint_list"></ol>
     <input type="hidden" name="waypoint_site_ids" id="waypoint_site_ids">
     <script id="sites-data" type="application/json">{{ sites_for_form | tojson }}</script>
-    <script id="existing-waypoints-data" type="application/json">{{ (existing_waypoints if circuit else []) | tojson }}</script>
+    <script id="existing-waypoints-data" type="application/json">{{ (existing_waypoints or []) | tojson }}</script>
   </div>
 
   <button class="btn btn-primary">Save</button>

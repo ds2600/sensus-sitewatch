@@ -111,11 +111,23 @@ def add_circuit():
     devices_for_form, interfaces_by_device = _endpoint_picker_data()
     interface_a_id = request.args.get("interface_a_id", type=int)
     preselected_interface_a = Interface.query.get(interface_a_id) if interface_a_id else None
+
+    # "Duplicate" (circuit_detail.html): prefills name/role/parent/capacity/
+    # waypoints from an existing circuit as a starting point — deliberately
+    # NOT its interfaces, since two circuits can't actually share an
+    # endpoint. Leaf-fields stay blank/editable same as a plain Add.
+    duplicate_id = request.args.get("duplicate_id", type=int)
+    duplicate_source = Circuit.query.get(duplicate_id) if duplicate_id else None
+    existing_waypoints = ([{"id": w.site_id, "label": w.site.name} for w in duplicate_source.waypoints]
+                           if duplicate_source else [])
+
     return render_template(
         "circuit_form.html",
         devices_for_form=devices_for_form, interfaces_by_device=interfaces_by_device,
-        preselected_parent_id=request.args.get("parent_id", type=int),
+        preselected_parent_id=(request.args.get("parent_id", type=int)
+                                or (duplicate_source.parent_circuit_id if duplicate_source else None)),
         preselected_interface_a=preselected_interface_a,
+        duplicate_source=duplicate_source, existing_waypoints=existing_waypoints,
         **_form_options(),
     )
 

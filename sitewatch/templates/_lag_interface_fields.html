@@ -17,7 +17,7 @@
         <input class="form-control" id="interface_lag_a_search" placeholder="Pick a device first" autocomplete="off"
                value="{{ (circuit.lag_interface_a.if_descr or 'ifIndex ' ~ circuit.lag_interface_a.if_index) if circuit and circuit.lag_interface_a }}"
                {{ 'disabled' if not (circuit and circuit.lag_interface_a) }}>
-        <ul class="dropdown-menu search-menu w-100" id="interface_lag_a_menu"></ul>
+        <ul class="dropdown-menu search-menu interface-menu" id="interface_lag_a_menu"></ul>
       </div>
       <input type="hidden" name="lag_interface_a_id" id="interface_lag_a_id"
              value="{{ circuit.lag_interface_a_id if circuit and circuit.lag_interface_a_id else '' }}">
@@ -36,7 +36,7 @@
         <input class="form-control" id="interface_lag_b_search" placeholder="Pick a device first" autocomplete="off"
                value="{{ (circuit.lag_interface_b.if_descr or 'ifIndex ' ~ circuit.lag_interface_b.if_index) if circuit and circuit.lag_interface_b }}"
                {{ 'disabled' if not (circuit and circuit.lag_interface_b) }}>
-        <ul class="dropdown-menu search-menu w-100" id="interface_lag_b_menu"></ul>
+        <ul class="dropdown-menu search-menu interface-menu" id="interface_lag_b_menu"></ul>
       </div>
       <input type="hidden" name="lag_interface_b_id" id="interface_lag_b_id"
              value="{{ circuit.lag_interface_b_id if circuit and circuit.lag_interface_b_id else '' }}">

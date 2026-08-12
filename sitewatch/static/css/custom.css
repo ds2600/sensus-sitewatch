@@ -18,6 +18,14 @@
   overflow-y: auto;
 }
 
+/* Interface pickers (circuit_form.html) sit in a narrow half-of-a-half
+   column, but interface descriptions (ifDescr + ifAlias) are often long —
+   let the panel grow wider than its input instead of cramming/wrapping
+   descriptions unreadably. No w-100 on these menus; this sets the floor. */
+.dropdown-menu.search-menu.interface-menu {
+  min-width: 26rem;
+}
+
 /* Dashboard map — kept well under the full viewport on purpose (see
    map.js's sizeMapContainer) so there's room to scroll the page normally
    without the mouse landing on the map and Leaflet's scroll-to-zoom
