@@ -29,18 +29,28 @@ function curvedSegment(p0, p1, magnitude, steps = 16) {
   return points;
 }
 
-// A circuit's full path (site_a -> waypoints -> site_b) as one curved
-// polyline — each leg curves independently so waypoints stay fixed
-// pass-through points, not just the two real endpoints.
-function curvedPath(points, magnitude) {
+// A circuit's full path (site_a -> waypoints -> site_b) as one polyline,
+// but each leg gets its OWN magnitude via magnitudeForLeg(i) instead of one
+// magnitude for the whole line — see the per-segment grouping below this
+// exists for: two circuits with different real endpoints can still share a
+// run of waypoints in the middle, and only THAT shared stretch should fan
+// apart, not the rest of either circuit's route.
+function curvedPathBySegment(points, magnitudeForLeg) {
   const latLngs = points.map((p) => [p.lat, p.lon]);
-  if (!magnitude) return latLngs;
   let path = [];
   for (let i = 0; i < latLngs.length - 1; i++) {
-    const seg = curvedSegment(latLngs[i], latLngs[i + 1], magnitude);
+    const magnitude = magnitudeForLeg(i);
+    const seg = magnitude ? curvedSegment(latLngs[i], latLngs[i + 1], magnitude) : [latLngs[i], latLngs[i + 1]];
     path = path.concat(i === 0 ? seg : seg.slice(1)); // drop duplicate joint point
   }
   return path;
+}
+
+// Sorted-pair key identifying a segment regardless of which end is p0/p1 —
+// same site pair, same key, whichever circuit's path traverses it in
+// whichever direction.
+function segmentKey(p0, p1) {
+  return [p0.lat + "," + p0.lon, p1.lat + "," + p1.lon].sort().join("|");
 }
 
 // Deliberately well short of the full viewport — a map that fills nearly
@@ -102,20 +112,37 @@ async function loadMap() {
   // top, and site marker/line endpoints often share exact coordinates. If
   // markers went first, clicking a site would hit the line instead and show
   // the circuit's popup rather than the site's.
-  const byPair = {};
+  //
+  // Overlap grouping is per SEGMENT (each leg between two consecutive
+  // points along a circuit's site_a -> waypoints -> site_b path), not per
+  // whole circuit — two circuits with different real endpoints can still
+  // share a run of waypoints in the middle (e.g. two circuits that both
+  // route through the same regional hub) and would draw exactly on top of
+  // each other along that shared stretch even though their overall
+  // endpoint pairs never match. A same-endpoint-pair pair of circuits with
+  // no waypoints is just the one-segment case of this.
+  const bySegment = {};
   data.lines.forEach((l) => {
-    const key = [l.site_a.lat + "," + l.site_a.lon, l.site_b.lat + "," + l.site_b.lon].sort().join("|");
-    byPair[key] = byPair[key] || [];
-    byPair[key].push(l);
+    const points = [l.site_a, ...(l.waypoints || []), l.site_b];
+    for (let i = 0; i < points.length - 1; i++) {
+      const key = segmentKey(points[i], points[i + 1]);
+      (bySegment[key] = bySegment[key] || []).push(l.id);
+    }
   });
+  // Sorted, not insertion-order — a circuit lands on the same side across
+  // every segment it shares with the same other circuits, instead of
+  // potentially flipping sides leg to leg.
+  Object.values(bySegment).forEach((ids) => ids.sort((a, b) => a - b));
 
-  Object.values(byPair).forEach((group) => {
-    group.forEach((l, idx) => {
-      const magnitude = (idx - (group.length - 1) / 2) * 0.08;
-      const points = curvedPath([l.site_a, ...(l.waypoints || []), l.site_b], magnitude);
-      L.polyline(points, { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 })
-        .bindPopup(`<a href="/circuits/${l.id}">${l.name}</a> (${l.role})`).addTo(map);
+  data.lines.forEach((l) => {
+    const points = [l.site_a, ...(l.waypoints || []), l.site_b];
+    const path = curvedPathBySegment(points, (i) => {
+      const group = bySegment[segmentKey(points[i], points[i + 1])];
+      const idx = group.indexOf(l.id);
+      return (idx - (group.length - 1) / 2) * 0.08;
     });
+    L.polyline(path, { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 })
+      .bindPopup(`<a href="/circuits/${l.id}">${l.name}</a> (${l.role})`).addTo(map);
   });
 
   // Passthrough markers first and deliberately muted (small, translucent,
