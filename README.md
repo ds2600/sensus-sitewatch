@@ -4,6 +4,13 @@ Rudimentary NMS. Tracks sites, devices, and circuits. Displays status on a map. 
 
 Rename note: app name is a single config value (`APP_NAME` in `.env`). Change it there, not in code.
 
+Versioning: SemVer, tracked as `__version__` in `sitewatch/__init__.py` and
+shown in the page footer of every screen. Releases are tagged in git
+(`vX.Y.Z`) and published via GitHub Releases — bump `__version__`, commit,
+`git tag vX.Y.Z`, `git push --tags`, then `gh release create vX.Y.Z`.
+Currently pre-1.0 (`0.x`): breaking changes can still happen between
+minor versions until the first `1.0.0`.
+
 ---
 
 ## 1. Requirements

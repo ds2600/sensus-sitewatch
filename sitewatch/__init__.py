@@ -6,6 +6,11 @@ from sitewatch.extensions import db, login_manager, scheduler
 
 load_dotenv()
 
+# SemVer. Bump on every user-facing release; GitHub Releases tags match
+# this (vX.Y.Z). Surfaced in the UI footer (see inject_app_name below) so
+# anyone looking at a running instance can tell what's actually deployed.
+__version__ = "0.1.0"
+
 
 def create_app():
     app = Flask(__name__)
@@ -48,7 +53,7 @@ def create_app():
 
     @app.context_processor
     def inject_app_name():
-        return {"app_name": app.config["APP_NAME"]}
+        return {"app_name": app.config["APP_NAME"], "app_version": __version__}
 
     @app.template_filter("bps")
     def format_bps(value):
