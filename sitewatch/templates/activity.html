@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h4>Background activity</h4>
+<p class="text-body-secondary small">Poll cycles and manual walk/repolls. Newest first.</p>
+<div style="max-height: 75vh; overflow-y: auto;">
+  <table class="table table-sm">
+    <thead class="sticky-top bg-body"><tr><th>Activity</th><th>Status</th><th>Started</th><th>Duration</th><th></th></tr></thead>
+    <tbody id="activity-rows"><tr><td colspan="5" class="text-body-secondary">Loading&hellip;</td></tr></tbody>
+  </table>
+</div>
+{% endblock %}

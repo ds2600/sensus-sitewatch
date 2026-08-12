@@ -55,6 +55,21 @@ function sizeMapContainer() {
   el.style.height = Math.max(300, window.innerHeight - chrome) + "px";
 }
 
+// Regional views (see the Manage Regions page): a plain cookie, not a
+// server round-trip, so a senior manager who wants the whole picture and
+// someone who only cares about one region each just get whatever they
+// last picked back on their next visit, page to page.
+const REGION_COOKIE = "sitewatch_region";
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setCookie(name, value) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 24 * 365}`;
+}
+
 async function loadMap() {
   sizeMapContainer();
   const map = L.map("map").setView([39.8, -98.6], 4); // CONUS fallback until sites load (or if there are none)
@@ -74,10 +89,15 @@ async function loadMap() {
   // clusters (a handful of sites in one state) zoom in, wide spreads (coast
   // to coast) zoom out. maxZoom caps how far a tight cluster (including a
   // single site) zooms in, so there's still room to see what's around it.
-  if (data.sites.length > 0) {
-    const bounds = L.latLngBounds(data.sites.map((s) => [s.lat, s.lon]));
-    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 11 });
+  // This is what "All" in the region picker means — always re-fit to
+  // whatever sites currently exist, not a saved view.
+  function fitToAllSites() {
+    if (data.sites.length > 0) {
+      const bounds = L.latLngBounds(data.sites.map((s) => [s.lat, s.lon]));
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 11 });
+    }
   }
+  fitToAllSites();
 
   // Lines first, markers last — Leaflet stacks later-added vector layers on
   // top, and site marker/line endpoints often share exact coordinates. If
@@ -107,6 +127,28 @@ async function loadMap() {
     }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a>${isPassthrough ? " (passthrough)" : ""}`)
       .addTo(map).bringToFront();
   });
+
+  const regionSelect = document.getElementById("region_select");
+  if (regionSelect) {
+    function applySelectedRegion() {
+      setCookie(REGION_COOKIE, regionSelect.value);
+      if (regionSelect.value === "all") {
+        fitToAllSites();
+        return;
+      }
+      const opt = regionSelect.selectedOptions[0];
+      if (opt && opt.dataset.lat) {
+        map.setView([Number(opt.dataset.lat), Number(opt.dataset.lon)], Number(opt.dataset.zoom));
+      }
+    }
+
+    const saved = getCookie(REGION_COOKIE);
+    if (saved && [...regionSelect.options].some((o) => o.value === saved)) {
+      regionSelect.value = saved;
+    }
+    applySelectedRegion(); // may override the "All" fit already done above
+    regionSelect.addEventListener("change", applySelectedRegion);
+  }
 }
 
 loadMap();

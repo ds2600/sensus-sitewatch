@@ -48,12 +48,7 @@
 </div>
 
 <h5>Background activity</h5>
-<div class="col-md-8 mb-5">
-  <table class="table table-sm">
-    <thead><tr><th>Activity</th><th>Status</th><th>Started</th><th>Duration</th><th></th></tr></thead>
-    <tbody id="activity-rows"><tr><td colspan="5" class="text-body-secondary">Loading&hellip;</td></tr></tbody>
-  </table>
-</div>
+<p class="mb-5"><a href="{{ url_for('settings.activity') }}">View activity log</a></p>
 
 <h5>Circuit roles</h5>
 <table class="table table-sm col-md-6">
@@ -92,16 +87,43 @@
 </form>
 
 <h5>Backup &amp; restore</h5>
-<div class="alert alert-warning col-md-6">
+<div class="alert alert-warning col-md-8">
   Excludes device credentials — re-enter them on <a href="{{ url_for('devices.list_devices') }}">Devices</a> after import.
 </div>
-<div class="col-md-6 d-flex gap-2 align-items-start">
-  <a class="btn btn-outline-primary" href="{{ url_for('settings.export_backup') }}">Export backup (.json)</a>
+
+<div class="col-md-8 d-flex gap-2 align-items-start mb-4">
+  <a class="btn btn-outline-primary" href="{{ url_for('settings.export_backup', scope='all') }}">Export backup all (.json)</a>
   <form method="post" action="{{ url_for('settings.import_backup') }}" enctype="multipart/form-data"
         class="d-flex gap-2"
-        onsubmit="return confirm('Importing replaces ALL sites, devices, interfaces, circuits, roles, and settings with the contents of this file. This cannot be undone. Continue?');">
+        onsubmit="return confirm('Importing replaces ALL sites, devices, interfaces, circuits, roles, regions, and settings with the contents of this file. This cannot be undone. Continue?');">
+    <input type="hidden" name="scope" value="all">
     <input type="file" name="backup_file" accept="application/json" class="form-control" required>
-    <button class="btn btn-outline-danger text-nowrap">Import backup</button>
+    <button class="btn btn-outline-danger text-nowrap">Import backup all</button>
   </form>
 </div>
+
+<p class="text-body-secondary small mb-2">
+  Or one object type at a time — useful for sharing a subset, or recovering some data if a schema
+  change ever breaks a full-backup import.
+</p>
+<table class="table table-sm col-md-8">
+  <thead><tr><th>Object</th><th>Export</th><th>Import</th></tr></thead>
+  <tbody>
+    {% for scope, label in [('sites','Sites'), ('devices','Devices'), ('circuits','Circuits'), ('regions','Map regions'), ('settings','Settings')] %}
+    <tr>
+      <td>{{ label }}</td>
+      <td><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('settings.export_backup', scope=scope) }}">Export</a></td>
+      <td>
+        <form method="post" action="{{ url_for('settings.import_backup') }}" enctype="multipart/form-data"
+              class="d-flex gap-2"
+              onsubmit="return confirm('Replace all {{ label|lower }} with the contents of this file? This cannot be undone.');">
+          <input type="hidden" name="scope" value="{{ scope }}">
+          <input type="file" name="backup_file" accept="application/json" class="form-control form-control-sm" required>
+          <button class="btn btn-outline-danger btn-sm text-nowrap">Import</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% endblock %}

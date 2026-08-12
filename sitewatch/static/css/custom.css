@@ -24,3 +24,11 @@
 #map {
   height: 70vh;
 }
+
+/* Manage Regions page — orange border marks "you're positioning a view to
+   save", distinct from the read-only dashboard map right next to it in
+   the nav. */
+#region-edit-map {
+  height: 60vh;
+  border: 4px solid #fd7e14;
+}

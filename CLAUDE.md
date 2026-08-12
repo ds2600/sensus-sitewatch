@@ -38,8 +38,15 @@ site/circuit status on a Leaflet map. Full spec and setup steps: README.md.
    delivery. Both are intentionally isolated here so they can be swapped
    or extended without touching poller/status logic.
 9. `sitewatch/backup.py` — JSON export/import (Settings → Backup & restore).
-   Export never includes device credentials — see the module docstring.
-   Import is a full replace of config tables; see README.md section 13.
+   `export_data(scope=...)`/`import_data(data, scope=...)` — `scope="all"`
+   is the full backup (same file shape as always); `"sites"`, `"devices"`,
+   `"circuits"`, `"regions"`, `"settings"` export/import one object type at
+   a time, for sharing a subset or surviving a schema change that breaks
+   only part of a full-backup import. A scoped import only wipes/reloads
+   that scope's own table(s) — it never cascades to dependents (importing
+   "sites" alone doesn't touch devices even though they reference
+   site_id). Export never includes device credentials — see the module
+   docstring. See README.md section 13.
 
 ## Status model — the thing most likely to need care
 
@@ -114,25 +121,49 @@ code must say exactly what to do after `git pull`, e.g.:
 
 Don't make the user infer this from the diff — state it plainly every time.
 
-## Schema changes must keep old backups importable
+## Schema changes must not cost the user their data
 
-The user is fine re-running `flask --app app init-db` after a schema
-change (fresh, empty DB) — what they will not tolerate is having to
-manually re-enter sites/devices/circuits afterward. The deal: any backup
-exported before your change must still import cleanly after it. In
+Two layers exist for this, in order of preference:
+
+1. **`schema_sync.py`** — the first line of defense. Runs automatically on
+   every app start (and explicitly via `flask init-db`): diffs each
+   table's real columns against what `models.py` defines and
+   `ALTER TABLE ADD COLUMN`s anything missing. Purely additive — new
+   nullable columns, new tables — needs zero action from the user beyond
+   `git pull` + restart. Prefer this path for any schema change that can
+   be additive (which is almost all of them: a new nullable column, a new
+   table). It cannot rename, drop, or retype an existing column — don't
+   design a change that needs one of those without discussing it first.
+
+2. **`backup.py`'s per-scope export/import** — the fallback for a change
+   that genuinely can't be additive, and the mechanism for sharing a
+   subset of config between environments. `export_data(scope=...)` /
+   `import_data(data, scope=...)`: `scope="all"` is the full backup,
+   `"sites"`/`"devices"`/`"circuits"`/`"regions"`/`"settings"` are one
+   object type at a time. If a breaking change is ever unavoidable, the
+   user should still be able to recover the *unaffected* scopes from an
+   old full-backup export even if the affected scope's import fails.
+
+Either way, the deal holds: any backup exported before your change must
+still import cleanly after it (for `scope="all"`, that means the *old*
+required sections — `sites`, `devices`, `interfaces`, `circuit_roles`,
+`circuits`, `settings` — since a section added later, like `regions`, must
+stay optional even in a full backup; see `_SCOPE_KEYS["all"]`). In
 practice:
 
 - New `Circuit`/`Device`/etc. columns must be nullable (or have a safe
-  default) and read via `data[...].get("new_field")` in `backup.py`'s
-  `_load()`, never `data[...]["new_field"]` — an old export simply won't
-  have the key, and that must not be an error.
-- Don't add anything to `REQUIRED_KEYS` or bump `backup.VERSION` for an
-  additive change — that's what breaks old exports on purpose. Only bump
-  `VERSION` for a genuinely incompatible change, and even then prefer
-  handling both shapes in `_load()` over breaking old files outright.
+  default) and read via `data[...].get("new_field")` in the relevant
+  `_load_*()` function in `backup.py`, never `data[...]["new_field"]` — an
+  old export simply won't have the key, and that must not be an error.
+- Don't add a new section to `_SCOPE_KEYS["all"]` or bump `backup.VERSION`
+  for an additive change — that's what breaks old exports on purpose.
+  Only bump `VERSION` for a genuinely incompatible change, and even then
+  prefer handling both shapes in the loader over breaking old files
+  outright.
 - When a change does add a schema field, say so in the end-of-response
-  pull note (see below): `flask --app app init-db`, then re-import the
-  latest backup export — don't make the user re-enter data by hand.
+  pull note (see below) — usually "nothing needed, schema self-heals on
+  restart" now that `schema_sync.py` exists; only mention a manual
+  backup/reimport step if the change genuinely isn't additive.
 
 ## Known gaps / not yet built
 

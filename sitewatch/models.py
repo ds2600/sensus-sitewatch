@@ -372,3 +372,17 @@ class AlertMute(db.Model):
             db.session.commit()
             return False
         return True
+
+
+class MapRegion(db.Model):
+    """A saved dashboard map view — center point + zoom level, named. Purely
+    a UI convenience (the "All" option always re-fits to whatever sites
+    currently exist instead of reading a saved region), created from the
+    Manage Regions page by positioning the map how you want it and saving
+    that view."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    center_lat = db.Column(db.Float, nullable=False)
+    center_lon = db.Column(db.Float, nullable=False)
+    zoom = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

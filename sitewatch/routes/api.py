@@ -56,8 +56,10 @@ def status():
 @login_required
 def jobs():
     """Recent background activity (poll cycles, manual walk/repoll) for the
-    Settings page's activity list."""
-    return jsonify({"jobs": job_log.list_jobs()})
+    standalone activity page. `limit` lets that page ask for more than the
+    small default (job_log's in-memory store caps at 300 anyway)."""
+    limit = request.args.get("limit", 30, type=int)
+    return jsonify({"jobs": job_log.list_jobs(limit=limit)})
 
 
 @api_bp.route("/jobs/<job_id>/log")

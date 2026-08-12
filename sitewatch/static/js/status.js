@@ -113,7 +113,7 @@ function activityRow(job) {
 async function updateActivity() {
   const tbody = document.getElementById("activity-rows");
   if (!tbody) return;
-  const res = await fetch("/api/jobs");
+  const res = await fetch("/api/jobs?limit=100");
   const data = await res.json();
   tbody.innerHTML = "";
   if (data.jobs.length === 0) {

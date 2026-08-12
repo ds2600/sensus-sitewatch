@@ -35,6 +35,7 @@ def create_app():
     from sitewatch.routes.circuits import circuits_bp
     from sitewatch.routes.settings import settings_bp
     from sitewatch.routes.api import api_bp
+    from sitewatch.routes.regions import regions_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -43,6 +44,7 @@ def create_app():
     app.register_blueprint(circuits_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(regions_bp)
 
     @app.context_processor
     def inject_app_name():
