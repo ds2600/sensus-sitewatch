@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="d-flex align-items-center gap-2 mb-3">
+  {% if current_user.is_admin %}
   <a class="btn btn-primary" href="{{ url_for('sites.add_site') }}">Add site</a>
   <a class="btn btn-outline-primary" href="{{ url_for('sites.import_sites') }}">Import CSV</a>
+  {% endif %}
   {% if regions %}
   <form method="get" class="d-flex align-items-center gap-2">
     <select class="form-select form-select-sm w-auto" name="region_id" onchange="this.form.submit()">
@@ -15,7 +17,7 @@
   {% endif %}
 </div>
 {% if not sites %}
-<p class="text-body-secondary">No sites yet. <a href="{{ url_for('sites.add_site') }}">Add the first one</a>.</p>
+<p class="text-body-secondary">No sites yet.{% if current_user.is_admin %} <a href="{{ url_for('sites.add_site') }}">Add the first one</a>.{% endif %}</p>
 {% else %}
 <table class="table">
   <thead><tr><th>Name</th><th>Region</th><th>Status</th><th>Source</th></tr></thead>
@@ -24,7 +26,7 @@
     <tr data-href="{{ url_for('sites.site_detail', site_id=s.id) }}">
       <td>
         <a href="{{ url_for('sites.site_detail', site_id=s.id) }}">{{ s.name }}</a>
-        <a href="{{ url_for('sites.edit_site', site_id=s.id) }}" class="text-body-secondary small ms-1">edit</a>
+        {% if current_user.is_admin %}<a href="{{ url_for('sites.edit_site', site_id=s.id) }}" class="text-body-secondary small ms-1">edit</a>{% endif %}
       </td>
       <td>{{ s.region.name if s.region else '—' }}</td>
       <td><span class="badge bg-{{ 'success' if statuses[s.id]=='green' else ('warning' if statuses[s.id]=='yellow' else ('primary' if statuses[s.id]=='blue' else ('dark' if statuses[s.id]=='passthrough' else 'danger'))) }}">{{ statuses[s.id] }}</span></td>

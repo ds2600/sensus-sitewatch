@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from flask_login import login_required
 
+from sitewatch.auth import admin_required
 from sitewatch.extensions import db
 from sitewatch.models import Site, Circuit, Region, SITE_TYPES
 from sitewatch.status import compute_site_status, site_degree_breakdown
@@ -30,7 +31,7 @@ def list_sites():
 
 
 @sites_bp.route("/add", methods=["GET", "POST"])
-@login_required
+@admin_required
 def add_site():
     if request.method == "POST":
         site_type = request.form.get("site_type", "site")
@@ -51,13 +52,13 @@ def add_site():
 
 
 @sites_bp.route("/import")
-@login_required
+@admin_required
 def import_sites():
     return render_template("site_import.html", site_types=SITE_TYPES)
 
 
 @sites_bp.route("/import/template")
-@login_required
+@admin_required
 def import_sites_template():
     csv_text = (
         "Site,Lat,Long,Type\n"
@@ -69,7 +70,7 @@ def import_sites_template():
 
 
 @sites_bp.route("/import/preview", methods=["POST"])
-@login_required
+@admin_required
 def import_sites_preview():
     file = request.files.get("csv_file")
     if not file or file.filename == "":
@@ -132,7 +133,7 @@ def import_sites_preview():
 
 
 @sites_bp.route("/import/confirm", methods=["POST"])
-@login_required
+@admin_required
 def import_sites_confirm():
     names = request.form.getlist("row_name")
     lats = request.form.getlist("row_lat")
@@ -153,7 +154,7 @@ def import_sites_confirm():
 
 
 @sites_bp.route("/<int:site_id>/edit", methods=["GET", "POST"])
-@login_required
+@admin_required
 def edit_site(site_id):
     site = Site.query.get_or_404(site_id)
     if request.method == "POST":
@@ -174,7 +175,7 @@ def edit_site(site_id):
 
 
 @sites_bp.route("/<int:site_id>/delete", methods=["POST"])
-@login_required
+@admin_required
 def delete_site(site_id):
     site = Site.query.get_or_404(site_id)
     if site.devices:

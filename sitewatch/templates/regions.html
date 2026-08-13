@@ -4,7 +4,9 @@
 {{ breadcrumb([("Settings", url_for('settings.index')), ("Manage map views", none)]) }}
 <div class="d-flex align-items-center gap-2 mb-2">
   <h4 class="mb-0">Manage map views</h4>
+  {% if current_user.is_admin %}
   <button type="button" class="btn btn-primary btn-sm" id="save_region_btn">Save current view</button>
+  {% endif %}
 </div>
 <p class="text-body-secondary small">Pan/zoom to the view you want, then save it as a named view.</p>
 <div id="region-edit-map" class="mb-4 rounded"></div>
@@ -24,10 +26,12 @@
         </button>
       </td>
       <td>
+        {% if current_user.is_admin %}
         <form method="post" action="{{ url_for('regions.delete_region', region_id=r.id) }}"
               onsubmit="return confirm('Delete view {{ r.name }}?');">
           <button class="btn btn-outline-danger btn-sm">Delete</button>
         </form>
+        {% endif %}
       </td>
     </tr>
     {% else %}
@@ -36,6 +40,7 @@
   </tbody>
 </table>
 
+{% if current_user.is_admin %}
 <div class="modal" id="save-region-modal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -58,6 +63,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

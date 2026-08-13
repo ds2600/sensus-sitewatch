@@ -4,11 +4,13 @@
 {{ breadcrumb([("Sites", url_for('sites.list_sites')), (device.site.name, url_for('sites.site_detail', site_id=device.site_id)), (device.hostname, none)]) }}
 <div class="d-flex align-items-center gap-2">
   <h4 class="mb-0">{{ device.hostname }} — {{ device.mgmt_ip }}</h4>
+  {% if current_user.is_admin %}
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('devices.edit_device', device_id=device.id) }}">Edit</a>
   <form method="post" action="{{ url_for('devices.delete_device', device_id=device.id) }}" class="d-inline"
         onsubmit="return confirm('Delete {{ device.hostname }}? This cannot be undone.');">
     <button class="btn btn-outline-danger btn-sm">Delete</button>
   </form>
+  {% endif %}
 </div>
 <p>
   Site: <a href="{{ url_for('sites.site_detail', site_id=device.site_id) }}">{{ device.site.name }}</a> |
@@ -17,12 +19,14 @@
   Last polled: {{ device.last_polled_at or 'never' }} |
   Last walked: {{ device.last_walked_at or 'never' }}
 </p>
+{% if current_user.is_admin %}
 <div class="mb-3">
   <button type="button" class="btn btn-outline-primary" data-job-url="{{ url_for('devices.repoll_device', device_id=device.id) }}"
           data-job-label="Repolling {{ device.hostname }}">Repoll now</button>
   <button type="button" class="btn btn-outline-secondary" data-job-url="{{ url_for('devices.walk_device', device_id=device.id) }}"
           data-job-label="Walking {{ device.hostname }}">Walk now</button>
 </div>
+{% endif %}
 
 <p class="text-body-secondary small">
   Circuit-linked interfaces only. See <a href="{{ url_for('circuits.list_circuits') }}">Circuits</a> for utilization.
@@ -38,7 +42,7 @@
           <a href="{{ url_for('circuits.circuit_detail', circuit_id=circuits_by_interface_id[i.id].id) }}">{{ circuits_by_interface_id[i.id].name }}</a>
           {% else %}
           <span class="text-body-secondary">not monitored</span>
-          <a href="{{ url_for('circuits.add_circuit', interface_a_id=i.id) }}" class="small ms-1">add circuit</a>
+          {% if current_user.is_admin %}<a href="{{ url_for('circuits.add_circuit', interface_a_id=i.id) }}" class="small ms-1">add circuit</a>{% endif %}
           {% endif %}
         </td></tr>
     {% endfor %}

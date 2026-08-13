@@ -9,6 +9,7 @@
     {% endfor %}
   </select>
   <a href="{{ url_for('regions.manage_regions') }}" class="btn btn-outline-secondary btn-sm">Manage map views</a>
+  <button type="button" id="auto-refresh-toggle" class="btn btn-outline-secondary btn-sm ms-auto">Auto-refresh: Off</button>
 </div>
 <div id="map" class="mb-4 rounded border"></div>
 
@@ -29,10 +30,12 @@
         </form>
       </td>
       <td>
+        {% if current_user.is_admin %}
         <form method="post" action="{{ url_for('circuits.mute_circuit', circuit_id=h.circuit_id) }}" class="d-inline">
           <input type="hidden" name="minutes" value="15">
           <button class="btn btn-outline-secondary btn-sm">Mute 15m</button>
         </form>
+        {% endif %}
       </td>
     </tr>
     {% else %}
@@ -68,4 +71,5 @@
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auto_refresh.js') }}"></script>
 {% endblock %}

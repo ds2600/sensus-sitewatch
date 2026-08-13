@@ -25,13 +25,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     map.fitBounds(L.latLngBounds(data.sites.map((s) => [s.lat, s.lon])), { padding: [60, 60], maxZoom: 11 });
   }
 
-  document.getElementById("save_region_btn").addEventListener("click", () => {
-    const center = map.getCenter();
-    document.getElementById("save_center_lat").value = center.lat;
-    document.getElementById("save_center_lon").value = center.lng;
-    document.getElementById("save_zoom").value = map.getZoom();
-    bootstrap.Modal.getOrCreateInstance(document.getElementById("save-region-modal")).show();
-  });
+  // Read-only users don't get the Save button or its modal (see regions.html) —
+  // null-check instead of assuming it's there.
+  const saveBtn = document.getElementById("save_region_btn");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      const center = map.getCenter();
+      document.getElementById("save_center_lat").value = center.lat;
+      document.getElementById("save_center_lon").value = center.lng;
+      document.getElementById("save_zoom").value = map.getZoom();
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("save-region-modal")).show();
+    });
+  }
 
   document.querySelectorAll("[data-goto-lat]").forEach((btn) => {
     btn.addEventListener("click", () => {

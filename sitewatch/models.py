@@ -14,12 +14,19 @@ SOURCES = ("manual", "netbox")
 CIRCUIT_TIERS = ("critical", "auxiliary")
 CIRCUIT_STATES = ("up", "degraded", "down", "admin_down", "unreachable")
 SITE_TYPES = ("site", "passthrough")
+USER_ROLES = ("admin", "read_only")
 
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    # NOT NULL with server_default (not just default=) — schema_sync.py adds
+    # this column via raw ALTER TABLE, and SQLite refuses a NOT NULL column
+    # add with no DDL-level default on a non-empty table. server_default
+    # makes SQLite backfill every existing row (the admin seeded by
+    # `flask init-db` on any pre-roles deployment) with "admin" for free.
+    role = db.Column(db.String(20), nullable=False, default="admin", server_default="admin")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, password):
@@ -27,6 +34,10 @@ class User(UserMixin, db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    @property
+    def is_admin(self):
+        return self.role == "admin"
 
 
 class Setting(db.Model):

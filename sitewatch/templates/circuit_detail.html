@@ -9,6 +9,7 @@
 <div class="d-flex align-items-center gap-2">
   <h4 class="mb-0">{{ circuit.name }}</h4>
   <span class="badge bg-secondary">{{ circuit.current_state }}</span>
+  {% if current_user.is_admin %}
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('circuits.edit_circuit', circuit_id=circuit.id) }}">Edit</a>
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('circuits.add_circuit', duplicate_id=circuit.id) }}">Duplicate</a>
   {% if circuit.current_state == 'unreachable' %}
@@ -20,6 +21,7 @@
         onsubmit="return confirm('Delete {{ circuit.name }}? This cannot be undone.');">
     <button class="btn btn-outline-danger btn-sm">Delete</button>
   </form>
+  {% endif %}
 </div>
 <p>Role: {{ circuit.role.name }} ({{ circuit.role.tier }}) | Type: {{ 'bundle' if circuit.is_bundle else 'point-to-point' }}</p>
 {% if circuit.effective_waypoints %}
@@ -40,9 +42,11 @@
 {% if circuit.is_bundle %}
 <div class="d-flex align-items-center gap-2 mb-2">
   <h5 class="mb-0">Members</h5>
+  {% if current_user.is_admin %}
   <a class="btn btn-outline-primary btn-sm" href="{{ url_for('circuits.add_circuit', parent_id=circuit.id) }}">Add member circuit</a>
+  {% endif %}
 </div>
-{% if attachable_circuits %}
+{% if attachable_circuits and current_user.is_admin %}
 <form method="post" action="{{ url_for('circuits.attach_member', circuit_id=circuit.id) }}" class="d-flex gap-2 col-md-6 mb-3">
   <div class="dropdown flex-grow-1">
     <input class="form-control form-control-sm" id="attach_member_search" placeholder="Search existing circuit…" autocomplete="off">
@@ -87,6 +91,7 @@
 {% endif %}
 
 <h5>Alerting</h5>
+{% if current_user.is_admin %}
 {% if is_muted %}
 <form method="post" action="{{ url_for('circuits.unmute_circuit', circuit_id=circuit.id) }}">
   <button class="btn btn-outline-secondary btn-sm">Unmute</button>
@@ -97,9 +102,12 @@
   <button class="btn btn-outline-secondary btn-sm">Mute (max 60 min)</button>
 </form>
 {% endif %}
+{% else %}
+<p class="text-body-secondary">{{ 'Muted.' if is_muted else 'Not muted.' }}</p>
+{% endif %}
 {% endblock %}
 
-{% if attachable_circuits %}
+{% if attachable_circuits and current_user.is_admin %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/searchable_select.js') }}"></script>
 <script>

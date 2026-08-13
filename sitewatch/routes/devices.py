@@ -3,6 +3,7 @@ import ipaddress
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
 from flask_login import login_required
 
+from sitewatch.auth import admin_required
 from sitewatch.extensions import db
 from sitewatch.models import Device, Site, Circuit, VENDORS, SNMP_VERSIONS
 from sitewatch.discovery import perform_walk
@@ -44,7 +45,7 @@ def list_devices():
 
 
 @devices_bp.route("/add", methods=["GET", "POST"])
-@login_required
+@admin_required
 def add_device():
     if request.method == "POST":
         f = request.form
@@ -67,13 +68,13 @@ def add_device():
 
 
 @devices_bp.route("/import")
-@login_required
+@admin_required
 def import_devices():
     return render_template("device_import.html", vendors=VENDORS)
 
 
 @devices_bp.route("/import/template")
-@login_required
+@admin_required
 def import_devices_template():
     csv_text = "Site,Hostname,Mgmt IP,Vendor\nExample HQ,core-rtr-01,10.0.0.1,ios-xe\n"
     return Response(csv_text, mimetype="text/csv",
@@ -81,7 +82,7 @@ def import_devices_template():
 
 
 @devices_bp.route("/import/preview", methods=["POST"])
-@login_required
+@admin_required
 def import_devices_preview():
     file = request.files.get("csv_file")
     if not file or file.filename == "":
@@ -154,7 +155,7 @@ def import_devices_preview():
 
 
 @devices_bp.route("/import/confirm", methods=["POST"])
-@login_required
+@admin_required
 def import_devices_confirm():
     site_ids = request.form.getlist("row_site_id")
     hostnames = request.form.getlist("row_hostname")
@@ -191,7 +192,7 @@ def device_detail(device_id):
 
 
 @devices_bp.route("/<int:device_id>/edit", methods=["GET", "POST"])
-@login_required
+@admin_required
 def edit_device(device_id):
     device = Device.query.get_or_404(device_id)
     if request.method == "POST":
@@ -214,7 +215,7 @@ def edit_device(device_id):
 
 
 @devices_bp.route("/<int:device_id>/delete", methods=["POST"])
-@login_required
+@admin_required
 def delete_device(device_id):
     device = Device.query.get_or_404(device_id)
     iface_ids = [i.id for i in device.interfaces]
@@ -230,7 +231,7 @@ def delete_device(device_id):
 
 
 @devices_bp.route("/<int:device_id>/walk", methods=["POST"])
-@login_required
+@admin_required
 def walk_device(device_id):
     device = Device.query.get_or_404(device_id)
     hostname = device.hostname
@@ -250,7 +251,7 @@ def walk_device(device_id):
 
 
 @devices_bp.route("/<int:device_id>/repoll", methods=["POST"])
-@login_required
+@admin_required
 def repoll_device(device_id):
     device = Device.query.get_or_404(device_id)
     hostname = device.hostname

@@ -2,13 +2,15 @@
 {% from "_macros.html" import util_pct, repoll_unreachable_button %}
 {% block content %}
 <div class="d-flex gap-2 mb-3">
+  {% if current_user.is_admin %}
   <a class="btn btn-primary" href="{{ url_for('circuits.add_circuit') }}">Add circuit</a>
   <a class="btn btn-outline-primary" href="{{ url_for('circuits.import_circuits') }}">Import CSV</a>
+  {% endif %}
   <a class="btn btn-outline-secondary" href="{{ url_for('circuits.list_incidents') }}">Past incidents</a>
   {{ repoll_unreachable_button(unreachable_count) }}
 </div>
 {% if not circuits %}
-<p class="text-body-secondary">No circuits yet. <a href="{{ url_for('circuits.add_circuit') }}">Add the first one</a>.</p>
+<p class="text-body-secondary">No circuits yet.{% if current_user.is_admin %} <a href="{{ url_for('circuits.add_circuit') }}">Add the first one</a>.{% endif %}</p>
 {% else %}
 <table class="table">
   <thead><tr><th>Name</th><th>Role</th><th>Type</th><th>State</th><th>Capacity</th><th>Traffic</th><th>Util</th><th></th></tr></thead>
@@ -18,7 +20,7 @@
     <tr data-href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">
       <td>
         <a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a>
-        <a href="{{ url_for('circuits.edit_circuit', circuit_id=c.id) }}" class="text-body-secondary small ms-1">edit</a>
+        {% if current_user.is_admin %}<a href="{{ url_for('circuits.edit_circuit', circuit_id=c.id) }}" class="text-body-secondary small ms-1">edit</a>{% endif %}
       </td>
       <td>{{ c.role.name }} ({{ c.role.tier }})</td>
       <td>{{ 'bundle' if c.is_bundle else 'point-to-point' }}</td>
@@ -30,6 +32,7 @@
       </td>
       <td>{{ util_pct(c.current_in_bps, c.current_out_bps, capacity) }}</td>
       <td>
+        {% if current_user.is_admin %}
         {% if c.id in muted_ids %}
         <form method="post" action="{{ url_for('circuits.unmute_circuit', circuit_id=c.id) }}">
           <button class="btn btn-outline-secondary btn-sm">Unmute</button>
@@ -39,6 +42,7 @@
           <input type="hidden" name="minutes" value="15">
           <button class="btn btn-outline-secondary btn-sm">Mute 15m</button>
         </form>
+        {% endif %}
         {% endif %}
       </td>
     </tr>

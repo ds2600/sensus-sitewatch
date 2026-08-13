@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from flask import Flask
+from flask import Flask, render_template
 from dotenv import load_dotenv
 
 from sitewatch.extensions import db, login_manager, scheduler
@@ -10,7 +10,7 @@ load_dotenv()
 # SemVer. Bump on every user-facing release; GitHub Releases tags match
 # this (vX.Y.Z). Surfaced in the UI footer (see inject_app_name below) so
 # anyone looking at a running instance can tell what's actually deployed.
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 
 def create_app():
@@ -62,6 +62,10 @@ def create_app():
             "app_name": app.config["APP_NAME"], "app_version": __version__,
             "utc_now": datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
         }
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template("403.html"), 403
 
     @app.template_filter("bps")
     def format_bps(value):

@@ -1,9 +1,31 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash
-from flask_login import login_user, logout_user, login_required
+from functools import wraps
 
+from flask import Blueprint, render_template, redirect, url_for, request, flash, abort
+from flask_login import login_user, logout_user, login_required, current_user
+
+from sitewatch.extensions import login_manager
 from sitewatch.models import User
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def admin_required(fn):
+    """Drop-in replacement for @login_required on routes that mutate data —
+    the read_only role can view virtually everything but can't create,
+    edit, delete, walk/repoll, import, or reach Settings at all (the one
+    write exception, assigning an incident's external ticket number,
+    stays on plain @login_required — see circuits.py's set_incident_ticket).
+    Redirects to login the same way @login_required would for a logged-out
+    request; only aborts 403 once we know the user is authenticated but
+    not an admin."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return login_manager.unauthorized()
+        if not current_user.is_admin:
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])

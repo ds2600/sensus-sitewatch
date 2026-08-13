@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
 from flask_login import login_required
 
+from sitewatch.auth import admin_required
 from sitewatch.extensions import db
 from sitewatch.models import (
     Circuit, CircuitRole, CircuitWaypoint, Interface, Device, Site, AlertMute, Setting, CircuitStatusHistory,
@@ -112,7 +113,7 @@ def list_circuits():
 
 
 @circuits_bp.route("/add", methods=["GET", "POST"])
-@login_required
+@admin_required
 def add_circuit():
     if request.method == "POST":
         f = request.form
@@ -178,13 +179,13 @@ def add_circuit():
 
 
 @circuits_bp.route("/import")
-@login_required
+@admin_required
 def import_circuits():
     return render_template("circuit_import.html")
 
 
 @circuits_bp.route("/import/template")
-@login_required
+@admin_required
 def import_circuits_template():
     csv_text = ("Name,Role,Device A,Interface A,Device B,Interface B,Parent\n"
                 "Site A - Site B Link,core,core-rtr-01,GigabitEthernet0/0/1,core-rtr-02,GigabitEthernet0/0/1,\n")
@@ -193,7 +194,7 @@ def import_circuits_template():
 
 
 @circuits_bp.route("/import/preview", methods=["POST"])
-@login_required
+@admin_required
 def import_circuits_preview():
     file = request.files.get("csv_file")
     if not file or file.filename == "":
@@ -287,7 +288,7 @@ def import_circuits_preview():
 
 
 @circuits_bp.route("/import/confirm", methods=["POST"])
-@login_required
+@admin_required
 def import_circuits_confirm():
     names = request.form.getlist("row_name")
     role_ids = request.form.getlist("row_role_id")
@@ -370,7 +371,7 @@ def set_incident_ticket(history_id):
 
 
 @circuits_bp.route("/<int:circuit_id>/repoll", methods=["POST"])
-@login_required
+@admin_required
 def repoll_circuit(circuit_id):
     """The circuit page's Repoll button — only shown there while the
     circuit is unreachable (see circuit_detail.html). Repolls whichever
@@ -406,7 +407,7 @@ def repoll_circuit(circuit_id):
 
 
 @circuits_bp.route("/<int:circuit_id>/attach-member", methods=["POST"])
-@login_required
+@admin_required
 def attach_member(circuit_id):
     bundle = Circuit.query.get_or_404(circuit_id)
     member_id = request.form.get("member_circuit_id", type=int)
@@ -420,7 +421,7 @@ def attach_member(circuit_id):
 
 
 @circuits_bp.route("/<int:circuit_id>/edit", methods=["GET", "POST"])
-@login_required
+@admin_required
 def edit_circuit(circuit_id):
     """Name, role, parent, and capacity are editable. Leaf endpoints
     (interface_a/b) are not — delete and recreate if those need to change,
@@ -457,7 +458,7 @@ def edit_circuit(circuit_id):
 
 
 @circuits_bp.route("/<int:circuit_id>/delete", methods=["POST"])
-@login_required
+@admin_required
 def delete_circuit(circuit_id):
     circuit = Circuit.query.get_or_404(circuit_id)
     if circuit.children:
@@ -469,7 +470,7 @@ def delete_circuit(circuit_id):
 
 
 @circuits_bp.route("/<int:circuit_id>/mute", methods=["POST"])
-@login_required
+@admin_required
 def mute_circuit(circuit_id):
     minutes = min(int(request.form["minutes"]), Setting.get_int("mute_max_minutes"))
     existing = AlertMute.query.filter_by(circuit_id=circuit_id).first()
@@ -483,7 +484,7 @@ def mute_circuit(circuit_id):
 
 
 @circuits_bp.route("/<int:circuit_id>/unmute", methods=["POST"])
-@login_required
+@admin_required
 def unmute_circuit(circuit_id):
     AlertMute.query.filter_by(circuit_id=circuit_id).delete()
     db.session.commit()

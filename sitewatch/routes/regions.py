@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
 
+from sitewatch.auth import admin_required
 from sitewatch.extensions import db
 from sitewatch.models import MapRegion
 
@@ -14,7 +15,7 @@ def manage_regions():
 
 
 @regions_bp.route("/add", methods=["POST"])
-@login_required
+@admin_required
 def add_region():
     name = request.form.get("name", "").strip()
     if not name:
@@ -35,7 +36,7 @@ def add_region():
 
 
 @regions_bp.route("/<int:region_id>/delete", methods=["POST"])
-@login_required
+@admin_required
 def delete_region(region_id):
     region = MapRegion.query.get_or_404(region_id)
     db.session.delete(region)

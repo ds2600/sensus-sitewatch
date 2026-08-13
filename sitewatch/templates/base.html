@@ -16,7 +16,9 @@
       <a class="nav-link" href="{{ url_for('sites.list_sites') }}">Sites</a>
       <a class="nav-link" href="{{ url_for('devices.list_devices') }}">Devices</a>
       <a class="nav-link" href="{{ url_for('circuits.list_circuits') }}">Circuits</a>
+      {% if current_user.is_admin %}
       <a class="nav-link" href="{{ url_for('settings.index') }}">Settings</a>
+      {% endif %}
     </div>
     <div class="dropdown me-3">
       <input type="search" id="search-input" class="form-control form-control-sm" style="width:16rem;"
@@ -24,10 +26,16 @@
       <ul class="dropdown-menu search-menu" id="search-menu"></ul>
     </div>
     <div class="d-flex align-items-center">
+      {% if current_user.is_admin %}
       <a id="poller-status-icon" class="me-3 text-decoration-none" style="font-size:1.2rem;"
          href="{{ url_for('settings.index') }}#poller" title="Poller status">
         <span id="poller-status-symbol">&#9724;</span>
       </a>
+      {% else %}
+      <span id="poller-status-icon" class="me-3" style="font-size:1.2rem;" title="Poller status">
+        <span id="poller-status-symbol">&#9724;</span>
+      </span>
+      {% endif %}
       <span id="alert-bell" class="me-3" style="cursor:pointer; font-size:1.2rem;">
         &#128276; <span id="alert-count" class="badge bg-danger d-none">0</span>
       </span>

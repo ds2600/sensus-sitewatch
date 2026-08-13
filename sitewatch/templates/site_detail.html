@@ -5,11 +5,13 @@
 <div class="d-flex align-items-center gap-2">
   <h4 class="mb-0">{{ site.name }}</h4>
   <span class="badge bg-{{ 'success' if status=='green' else ('warning' if status=='yellow' else ('primary' if status=='blue' else ('dark' if status=='passthrough' else 'danger'))) }}">{{ status }}</span>
+  {% if current_user.is_admin %}
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('sites.edit_site', site_id=site.id) }}">Edit</a>
   <form method="post" action="{{ url_for('sites.delete_site', site_id=site.id) }}" class="d-inline"
         onsubmit="return confirm('Delete {{ site.name }}? This cannot be undone.');">
     <button class="btn btn-outline-danger btn-sm">Delete</button>
   </form>
+  {% endif %}
 </div>
 
 {% if site.site_type == 'passthrough' %}
@@ -17,7 +19,9 @@
 {% else %}
 <div class="d-flex align-items-center gap-2 mt-4">
   <h5 class="mb-0">Devices</h5>
+  {% if current_user.is_admin %}
   <a class="btn btn-outline-primary btn-sm" href="{{ url_for('devices.add_device', site_id=site.id) }}">Add device</a>
+  {% endif %}
 </div>
 <ul class="list-group mb-4">
   {% for d in devices %}
