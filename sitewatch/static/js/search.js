@@ -17,8 +17,9 @@
     sites: (id) => `/sites/${id}`,
     devices: (id) => `/devices/${id}`,
     circuits: (id) => `/circuits/${id}`,
+    incidents: (id) => `/circuits/${id}`,  // incidents don't have their own page — land on the owning circuit
   };
-  const labelFor = { sites: "Sites", devices: "Devices", circuits: "Circuits" };
+  const labelFor = { sites: "Sites", devices: "Devices", circuits: "Circuits", incidents: "Incidents" };
 
   function open() {
     menu.classList.add("show");
@@ -31,7 +32,7 @@
   function render(data) {
     menu.innerHTML = "";
     items = [];
-    for (const type of ["sites", "devices", "circuits"]) {
+    for (const type of ["sites", "devices", "circuits", "incidents"]) {
       const group = data[type] || [];
       if (!group.length) continue;
       const header = document.createElement("li");

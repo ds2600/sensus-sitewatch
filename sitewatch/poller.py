@@ -300,7 +300,11 @@ def _transition(circuit, new_state):
     circuit.state_changed_at = datetime.utcnow()
 
     if new_state == "down":
-        db.session.add(CircuitStatusHistory(circuit_id=circuit.id, state="down", started_at=datetime.utcnow()))
+        history = CircuitStatusHistory(circuit_id=circuit.id, state="down", started_at=datetime.utcnow())
+        db.session.add(history)
+        db.session.flush()  # need history.id assigned before it can go into incident_number
+        prefix = Setting.get("incident_number_prefix")
+        history.incident_number = f"{prefix}-{history.id:06d}"
         from sitewatch.models import AlertMute
         if not AlertMute.is_muted(circuit.id):
             send_down_alert(circuit)

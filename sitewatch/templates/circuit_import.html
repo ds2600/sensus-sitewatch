@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
+{% block content %}
+{{ breadcrumb([("Circuits", url_for('circuits.list_circuits')), ("Import", none)]) }}
+<h4>Import circuits from CSV</h4>
+
+<p class="text-body-secondary">
+  Columns, in any order (matched case-insensitively):
+</p>
+<table class="table table-sm col-md-8 mb-3">
+  <thead><tr><th>Column</th><th>Required</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Name</td><td>Yes</td><td>Circuit name.</td></tr>
+    <tr><td>Role</td><td>Yes</td><td>Must match an existing circuit role's name exactly.</td></tr>
+    <tr><td>Device A</td><td>Yes</td><td>Must match an existing device's hostname exactly.</td></tr>
+    <tr><td>Interface A</td><td>Yes</td><td>Must match one of Device A's already-discovered interfaces, not already used by another circuit.</td></tr>
+    <tr><td>Device B</td><td>Yes</td><td>Must match an existing device's hostname exactly.</td></tr>
+    <tr><td>Interface B</td><td>Yes</td><td>Must match one of Device B's already-discovered interfaces, not already used by another circuit.</td></tr>
+    <tr><td>Parent</td><td>No</td><td>Name of the parent bundle circuit. Leave blank for no parent. If the name doesn't match an existing bundle, a new one is created.</td></tr>
+  </tbody>
+</table>
+<p class="text-body-secondary small mb-3">
+  Every row creates a point-to-point circuit — interfaces must already exist on each device (walk the device first).
+  Bundles aren't imported directly, only referenced as a Parent.
+</p>
+<p class="mb-4">
+  <a href="{{ url_for('circuits.import_circuits_template') }}">Download a CSV template</a>
+</p>
+
+<form method="post" action="{{ url_for('circuits.import_circuits_preview') }}" enctype="multipart/form-data"
+      class="d-flex gap-2 col-md-8">
+  <input type="file" name="csv_file" accept=".csv,text/csv" class="form-control" required>
+  <button class="btn btn-primary text-nowrap">Preview import</button>
+</form>
+<p class="text-body-secondary small mt-2">Nothing is added until you review and confirm on the next page.</p>
+{% endblock %}

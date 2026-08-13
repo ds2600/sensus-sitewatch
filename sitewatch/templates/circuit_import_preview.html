@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
+{% block content %}
+{{ breadcrumb([("Circuits", url_for('circuits.list_circuits')), ("Import", url_for('circuits.import_circuits')), ("Preview", none)]) }}
+<h4>Preview import</h4>
+<p class="text-body-secondary">{{ valid_count }} of {{ total_count }} row(s) valid.</p>
+
+<table class="table table-sm">
+  <thead><tr><th>#</th><th>Name</th><th>Role</th><th>Endpoint A</th><th>Endpoint B</th><th>Parent</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr class="{{ 'table-danger' if r.errors else ('table-warning' if r.notes else '') }}">
+      <td>{{ r.row_num }}</td>
+      <td>{{ r.name }}</td>
+      <td>{{ r.role }}</td>
+      <td>{{ r.device_a }}{% if r.interface_a %} : {{ r.interface_a }}{% endif %}</td>
+      <td>{{ r.device_b }}{% if r.interface_b %} : {{ r.interface_b }}{% endif %}</td>
+      <td>{{ r.parent }}</td>
+      <td>
+        {% if r.errors %}
+        {% for e in r.errors %}<div class="small text-danger">{{ e }}</div>{% endfor %}
+        {% else %}
+        <span class="small">OK</span>
+        {% endif %}
+        {% for n in r.notes %}<div class="small text-body-secondary">{{ n }}</div>{% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if valid_count %}
+<form method="post" action="{{ url_for('circuits.import_circuits_confirm') }}">
+  {% for r in rows if not r.errors %}
+  <input type="hidden" name="row_name" value="{{ r.name }}">
+  <input type="hidden" name="row_role_id" value="{{ r.role_id }}">
+  <input type="hidden" name="row_interface_a_id" value="{{ r.interface_a_id }}">
+  <input type="hidden" name="row_interface_b_id" value="{{ r.interface_b_id }}">
+  <input type="hidden" name="row_parent_id" value="{{ r.parent_id or '' }}">
+  <input type="hidden" name="row_parent_new_name" value="{{ r.parent_new_name }}">
+  {% endfor %}
+  <button class="btn btn-primary">Import {{ valid_count }} valid circuit{{ 's' if valid_count != 1 else '' }}</button>
+  <a href="{{ url_for('circuits.import_circuits') }}" class="btn btn-outline-secondary">Upload a different file</a>
+</form>
+{% else %}
+<p class="text-danger">No valid rows to import. Fix the errors above and upload again.</p>
+<a href="{{ url_for('circuits.import_circuits') }}" class="btn btn-outline-secondary">Back</a>
+{% endif %}
+{% endblock %}

@@ -1,13 +1,35 @@
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
 from flask_login import login_required
 
 from sitewatch.extensions import db
-from sitewatch.models import Circuit, CircuitRole, CircuitWaypoint, Interface, Device, Site, AlertMute, Setting
+from sitewatch.models import (
+    Circuit, CircuitRole, CircuitWaypoint, Interface, Device, Site, AlertMute, Setting, CircuitStatusHistory,
+)
 from sitewatch.poller import poll_device_now
 from sitewatch import job_log, cooldown
+from sitewatch.csv_import import parse_csv, CsvImportError
 
 circuits_bp = Blueprint("circuits", __name__, url_prefix="/circuits")
+
+_CIRCUIT_CSV_HEADER_ALIASES = {
+    "name": ["name", "circuit name"],
+    "role": ["role"],
+    "device_a": ["device a", "device a hostname", "hostname a"],
+    "interface_a": ["interface a"],
+    "device_b": ["device b", "device b hostname", "hostname b"],
+    "interface_b": ["interface b"],
+}
+_CIRCUIT_CSV_OPTIONAL_ALIASES = {
+    "parent": ["parent", "parent circuit", "bundle"],
+}
+
+
+def _interface_label(interface):
+    """Same label the interface picker shows on circuit_form.html — the
+    thing a user copies into a CSV's Interface A/B column, so matching
+    against it (case-insensitively) is what makes the two consistent."""
+    return interface.if_descr or f"ifIndex {interface.if_index}"
 
 
 def _form_options():
@@ -155,11 +177,163 @@ def add_circuit():
     )
 
 
+@circuits_bp.route("/import")
+@login_required
+def import_circuits():
+    return render_template("circuit_import.html")
+
+
+@circuits_bp.route("/import/template")
+@login_required
+def import_circuits_template():
+    csv_text = ("Name,Role,Device A,Interface A,Device B,Interface B,Parent\n"
+                "Site A - Site B Link,core,core-rtr-01,GigabitEthernet0/0/1,core-rtr-02,GigabitEthernet0/0/1,\n")
+    return Response(csv_text, mimetype="text/csv",
+                     headers={"Content-Disposition": "attachment; filename=sitewatch-circuits-template.csv"})
+
+
+@circuits_bp.route("/import/preview", methods=["POST"])
+@login_required
+def import_circuits_preview():
+    file = request.files.get("csv_file")
+    if not file or file.filename == "":
+        flash("Choose a CSV file.")
+        return redirect(url_for("circuits.import_circuits"))
+    try:
+        rows = parse_csv(file, _CIRCUIT_CSV_HEADER_ALIASES, _CIRCUIT_CSV_OPTIONAL_ALIASES)
+    except CsvImportError as e:
+        flash(str(e))
+        return redirect(url_for("circuits.import_circuits"))
+
+    roles_by_name = {r.name.strip().lower(): r for r in CircuitRole.query.all()}
+    devices_by_hostname = {d.hostname.strip().lower(): d for d in Device.query.all()}
+    bundles_by_name = {c.name.strip().lower(): c
+                        for c in Circuit.query.filter_by(interface_a_id=None, interface_b_id=None).all()}
+    used_interface_ids = set()
+    for c in Circuit.query.all():
+        for fid in (c.interface_a_id, c.interface_b_id, c.lag_interface_a_id, c.lag_interface_b_id):
+            if fid:
+                used_interface_ids.add(fid)
+    seen_interface_ids = set()
+
+    preview_rows = []
+    for i, row in enumerate(rows, start=1):
+        errors = []
+        notes = []
+
+        name = row["name"]
+        if not name:
+            errors.append("Name is required.")
+
+        role = roles_by_name.get(row["role"].strip().lower()) if row["role"] else None
+        if not row["role"]:
+            errors.append("Role is required.")
+        elif role is None:
+            errors.append(f"Role '{row['role']}' not found.")
+
+        def _resolve_endpoint(device_key, interface_key, label):
+            device_name = row[device_key]
+            interface_name = row[interface_key]
+            if not device_name:
+                errors.append(f"Device {label} is required.")
+                return None, None
+            device = devices_by_hostname.get(device_name.strip().lower())
+            if device is None:
+                errors.append(f"Device '{device_name}' not found.")
+                return device_name, None
+            if not interface_name:
+                errors.append(f"Interface {label} is required.")
+                return device_name, None
+            interfaces_by_label = {_interface_label(iface).strip().lower(): iface for iface in device.interfaces}
+            interface = interfaces_by_label.get(interface_name.strip().lower())
+            if interface is None:
+                errors.append(f"Interface '{interface_name}' not found on device '{device_name}'.")
+                return device_name, None
+            if interface.id in used_interface_ids:
+                errors.append(f"Interface '{interface_name}' on '{device_name}' is already used by another circuit.")
+            elif interface.id in seen_interface_ids:
+                errors.append(f"Interface '{interface_name}' on '{device_name}' is duplicated earlier in this file.")
+            else:
+                seen_interface_ids.add(interface.id)
+            return device_name, interface
+
+        device_a_name, interface_a = _resolve_endpoint("device_a", "interface_a", "A")
+        device_b_name, interface_b = _resolve_endpoint("device_b", "interface_b", "B")
+
+        parent_name = row["parent"]
+        parent_id = None
+        parent_new_name = ""
+        if parent_name:
+            bundle = bundles_by_name.get(parent_name.strip().lower())
+            if bundle is not None:
+                parent_id = bundle.id
+            else:
+                parent_new_name = parent_name
+                notes.append(f"Parent '{parent_name}' not found — will be created.")
+
+        preview_rows.append({
+            "row_num": i, "name": name, "role": row["role"], "role_id": role.id if role else None,
+            "device_a": device_a_name, "interface_a": row["interface_a"],
+            "interface_a_id": interface_a.id if interface_a else None,
+            "device_b": device_b_name, "interface_b": row["interface_b"],
+            "interface_b_id": interface_b.id if interface_b else None,
+            "parent": parent_name, "parent_id": parent_id, "parent_new_name": parent_new_name,
+            "errors": errors, "notes": notes,
+        })
+
+    valid_count = sum(1 for r in preview_rows if not r["errors"])
+    return render_template("circuit_import_preview.html", rows=preview_rows,
+                            valid_count=valid_count, total_count=len(preview_rows))
+
+
+@circuits_bp.route("/import/confirm", methods=["POST"])
+@login_required
+def import_circuits_confirm():
+    names = request.form.getlist("row_name")
+    role_ids = request.form.getlist("row_role_id")
+    interface_a_ids = request.form.getlist("row_interface_a_id")
+    interface_b_ids = request.form.getlist("row_interface_b_id")
+    parent_ids = request.form.getlist("row_parent_id")
+    parent_new_names = request.form.getlist("row_parent_new_name")
+    if not names:
+        flash("Nothing to import.")
+        return redirect(url_for("circuits.import_circuits"))
+
+    created_bundles = {}  # lowercased name -> Circuit, so rows sharing a new parent name reuse the same bundle
+    count = 0
+    for name, role_id, ia, ib, pid, pnew in zip(
+        names, role_ids, interface_a_ids, interface_b_ids, parent_ids, parent_new_names
+    ):
+        parent_circuit_id = int(pid) if pid else None
+        if pnew:
+            key = pnew.strip().lower()
+            bundle = created_bundles.get(key)
+            if bundle is None:
+                bundle = Circuit(name=pnew, role_id=CircuitRole.default_role().id)
+                db.session.add(bundle)
+                db.session.flush()
+                created_bundles[key] = bundle
+            parent_circuit_id = bundle.id
+        db.session.add(Circuit(
+            name=name, role_id=int(role_id),
+            interface_a_id=int(ia), interface_b_id=int(ib),
+            parent_circuit_id=parent_circuit_id,
+        ))
+        count += 1
+    db.session.commit()
+    created_bundle_note = f" ({len(created_bundles)} new parent bundle(s) created)" if created_bundles else ""
+    flash(f"Imported {count} circuit(s){created_bundle_note}.")
+    return redirect(url_for("circuits.list_circuits"))
+
+
 @circuits_bp.route("/<int:circuit_id>")
 @login_required
 def circuit_detail(circuit_id):
     circuit = Circuit.query.get_or_404(circuit_id)
     is_muted = AlertMute.is_muted(circuit_id)
+    open_incident = (CircuitStatusHistory.query
+                      .filter_by(circuit_id=circuit_id, cleared_at=None)
+                      .order_by(CircuitStatusHistory.started_at.desc()).first())
     # Only unparented circuits — this is for attaching a standalone circuit
     # someone already built, not for stealing one away from another bundle
     # (Edit's own Parent bundle field already covers that, deliberately).
@@ -169,7 +343,30 @@ def circuit_detail(circuit_id):
         if circuit.is_bundle else []
     )
     return render_template("circuit_detail.html", circuit=circuit, is_muted=is_muted,
-                            attachable_circuits=attachable_circuits)
+                            open_incident=open_incident, attachable_circuits=attachable_circuits)
+
+
+@circuits_bp.route("/incidents")
+@login_required
+def list_incidents():
+    """All down-incidents, open and closed — the dashboard's own lists only
+    ever show what's currently down plus the last 20 cleared, so this is
+    the uncapped history view (and the target of "Past incidents" links)."""
+    incidents = (CircuitStatusHistory.query.join(Circuit)
+                 .order_by(CircuitStatusHistory.started_at.desc()).all())
+    return render_template("circuit_incidents.html", incidents=incidents)
+
+
+@circuits_bp.route("/incidents/<int:history_id>/ticket", methods=["POST"])
+@login_required
+def set_incident_ticket(history_id):
+    history = CircuitStatusHistory.query.get_or_404(history_id)
+    history.external_ticket = request.form.get("external_ticket", "").strip() or None
+    db.session.commit()
+    next_url = request.form.get("next")
+    if not next_url or not next_url.startswith("/"):
+        next_url = url_for("circuits.circuit_detail", circuit_id=history.circuit_id)
+    return redirect(next_url)
 
 
 @circuits_bp.route("/<int:circuit_id>/repoll", methods=["POST"])

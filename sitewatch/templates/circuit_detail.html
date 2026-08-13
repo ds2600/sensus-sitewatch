@@ -76,6 +76,16 @@
    {{ circuit.interface_b.device.hostname }}:{{ circuit.interface_b.if_descr }}</p>
 {% endif %}
 
+{% if open_incident %}
+<h5>Incident</h5>
+<p class="mb-1">{{ open_incident.incident_number }} — down since {{ open_incident.started_at.strftime('%Y-%m-%d %H:%M') }}</p>
+<form method="post" action="{{ url_for('circuits.set_incident_ticket', history_id=open_incident.id) }}" class="d-flex gap-2 col-md-6 mb-4">
+  <input type="hidden" name="next" value="{{ request.path }}">
+  <input type="text" name="external_ticket" value="{{ open_incident.external_ticket or '' }}" class="form-control form-control-sm" placeholder="NOC ticket #">
+  <button class="btn btn-outline-secondary btn-sm text-nowrap">Save ticket #</button>
+</form>
+{% endif %}
+
 <h5>Alerting</h5>
 {% if is_muted %}
 <form method="post" action="{{ url_for('circuits.unmute_circuit', circuit_id=circuit.id) }}">

@@ -18,12 +18,15 @@ class CsvImportError(Exception):
     pass
 
 
-def parse_csv(file_storage, header_aliases):
+def parse_csv(file_storage, header_aliases, optional_aliases=None):
     """header_aliases: {canonical_name: [acceptable header strings,
-    matched case-insensitively]}. Returns a list of dicts keyed by
-    canonical_name, values stripped. Raises CsvImportError for anything
-    that makes the whole file unusable (bad encoding, empty file, a
-    required column missing entirely)."""
+    matched case-insensitively]}. optional_aliases: same shape, but a
+    missing column just means every row gets "" for that canonical_name
+    instead of raising — for a column like Circuits import's Parent,
+    which is allowed to be absent from the file entirely. Returns a list
+    of dicts keyed by canonical_name, values stripped. Raises
+    CsvImportError for anything that makes the whole file unusable (bad
+    encoding, empty file, a required column missing entirely)."""
     try:
         text = file_storage.read().decode("utf-8-sig")  # -sig: tolerate Excel's BOM
     except UnicodeDecodeError:
@@ -39,11 +42,17 @@ def parse_csv(file_storage, header_aliases):
         if actual is None:
             raise CsvImportError(f"CSV is missing a required column: {aliases[0]}.")
         header_map[canonical] = actual
+    optional_map = {
+        canonical: next((normalized[a] for a in aliases if a in normalized), None)
+        for canonical, aliases in (optional_aliases or {}).items()
+    }
 
-    rows = [
-        {canonical: (raw.get(actual) or "").strip() for canonical, actual in header_map.items()}
-        for raw in reader
-    ]
+    rows = []
+    for raw in reader:
+        row = {canonical: (raw.get(actual) or "").strip() for canonical, actual in header_map.items()}
+        for canonical, actual in optional_map.items():
+            row[canonical] = (raw.get(actual) or "").strip() if actual else ""
+        rows.append(row)
     if not rows:
         raise CsvImportError("CSV has no data rows.")
     return rows

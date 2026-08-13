@@ -41,6 +41,7 @@ class Setting(db.Model):
         "google_chat_webhook_url": "",
         "status_history_retention_days": "30",
         "poller_max_workers": "8",
+        "incident_number_prefix": "INC",
     }
 
     @staticmethod
@@ -390,6 +391,14 @@ class CircuitStatusHistory(db.Model):
     state = db.Column(db.String(20), nullable=False)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     cleared_at = db.Column(db.DateTime, nullable=True)
+
+    # incident_number: assigned automatically the moment this row is
+    # created (see poller.py's _transition) — SiteWatch's own identifier
+    # for the down event, independent of whatever the NOC's external
+    # system assigns. external_ticket: set later by a human once the NOC
+    # opens (or already has) a ticket for it — never auto-populated.
+    incident_number = db.Column(db.String(20), nullable=True)
+    external_ticket = db.Column(db.String(80), nullable=True)
 
 
 class UtilizationRollup(db.Model):

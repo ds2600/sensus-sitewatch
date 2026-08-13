@@ -56,22 +56,30 @@ def status():
 @api_bp.route("/search")
 @login_required
 def search():
-    """Navbar quick search — substring match across sites/devices/circuits,
-    grouped and capped per type so the dropdown stays short. Sites also
-    match on their region's name, so "search for sites" covers finding a
-    region's whole member list, not just a site by its own name."""
+    """Navbar quick search — substring match across sites/devices/circuits/
+    incidents, grouped and capped per type so the dropdown stays short.
+    Sites also match on their region's name, so "search for sites" covers
+    finding a region's whole member list, not just a site by its own name.
+    Incidents match on either SiteWatch's own incident_number or the NOC's
+    external_ticket, open or closed — the result links to the owning
+    circuit's detail page, same as a plain circuit-name match would."""
     q = request.args.get("q", "").strip()
     if len(q) < 2:
-        return jsonify({"sites": [], "devices": [], "circuits": []})
+        return jsonify({"sites": [], "devices": [], "circuits": [], "incidents": []})
     like = f"%{q}%"
     sites = (Site.query.outerjoin(Region).filter(or_(Site.name.ilike(like), Region.name.ilike(like)))
              .order_by(Site.name).limit(5).all())
     devices = Device.query.filter(Device.hostname.ilike(like)).order_by(Device.hostname).limit(5).all()
     circuits = Circuit.query.filter(Circuit.name.ilike(like)).order_by(Circuit.name).limit(5).all()
+    incidents = (CircuitStatusHistory.query.join(Circuit)
+                 .filter(or_(CircuitStatusHistory.incident_number.ilike(like),
+                             CircuitStatusHistory.external_ticket.ilike(like)))
+                 .order_by(CircuitStatusHistory.started_at.desc()).limit(5).all())
     return jsonify({
         "sites": [{"id": s.id, "label": s.name} for s in sites],
         "devices": [{"id": d.id, "label": d.hostname} for d in devices],
         "circuits": [{"id": c.id, "label": c.name} for c in circuits],
+        "incidents": [{"id": h.circuit_id, "label": f"{h.incident_number} — {h.circuit.name}"} for h in incidents],
     })
 
 

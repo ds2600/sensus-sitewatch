@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import breadcrumb %}
+{% block content %}
+{{ breadcrumb([("Circuits", url_for('circuits.list_circuits')), ("Past incidents", none)]) }}
+<h4>Past incidents</h4>
+
+<table class="table table-sm">
+  <thead><tr><th>Circuit</th><th>Incident #</th><th>Down since</th><th>Cleared at</th><th>Ticket #</th></tr></thead>
+  <tbody>
+    {% for h in incidents %}
+    <tr>
+      <td><a href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
+      <td>{{ h.incident_number }}</td>
+      <td>{{ h.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>
+        {% if h.cleared_at %}{{ h.cleared_at.strftime('%Y-%m-%d %H:%M') }}
+        {% else %}<span class="badge bg-danger">Ongoing</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('circuits.set_incident_ticket', history_id=h.id) }}" class="d-flex gap-1">
+          <input type="hidden" name="next" value="{{ request.path }}">
+          <input type="text" name="external_ticket" value="{{ h.external_ticket or '' }}" class="form-control form-control-sm" style="max-width:9rem" placeholder="NOC ticket #">
+          <button class="btn btn-outline-secondary btn-sm">Save</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="text-muted">No incidents yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

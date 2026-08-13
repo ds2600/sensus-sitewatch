@@ -3,6 +3,8 @@
 {% block content %}
 <div class="d-flex gap-2 mb-3">
   <a class="btn btn-primary" href="{{ url_for('circuits.add_circuit') }}">Add circuit</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('circuits.import_circuits') }}">Import CSV</a>
+  <a class="btn btn-outline-secondary" href="{{ url_for('circuits.list_incidents') }}">Past incidents</a>
   {{ repoll_unreachable_button(unreachable_count) }}
 </div>
 {% if not circuits %}
