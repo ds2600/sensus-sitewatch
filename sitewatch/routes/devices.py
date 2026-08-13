@@ -1,5 +1,4 @@
 import ipaddress
-import threading
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response
 from flask_login import login_required
@@ -8,7 +7,7 @@ from sitewatch.extensions import db
 from sitewatch.models import Device, Site, Circuit, VENDORS, SNMP_VERSIONS
 from sitewatch.discovery import perform_walk
 from sitewatch.poller import poll_device_now
-from sitewatch import job_log
+from sitewatch import job_log, cooldown
 from sitewatch.csv_import import parse_csv, CsvImportError
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
@@ -230,22 +229,14 @@ def delete_device(device_id):
     return redirect(url_for("devices.list_devices"))
 
 
-def _run_in_background(job_id, work):
-    """Starts work() (no args) on a daemon thread with this request's app
-    bound, its log output routed into job_id (see job_log.py). The route
-    that called this returns immediately with job_id for the browser to
-    poll — walk/repoll take multiple seconds of real SNMP round-trips, long
-    enough that blocking the request for it forces a bare spinner with no
-    visibility into what's actually happening or stuck."""
-    app = current_app._get_current_object()
-    threading.Thread(target=job_log.run_job, args=(job_id, work, app), daemon=True).start()
-
-
 @devices_bp.route("/<int:device_id>/walk", methods=["POST"])
 @login_required
 def walk_device(device_id):
     device = Device.query.get_or_404(device_id)
     hostname = device.hostname
+    wait = cooldown.check_and_start(device_id)
+    if wait:
+        return jsonify({"error": f"Wait {wait}s before hitting {hostname} again."}), 429
     job_id = job_log.start_job(f"Walking {hostname}")
 
     def work():
@@ -253,7 +244,7 @@ def walk_device(device_id):
         perform_walk(d)
         db.session.commit()
 
-    _run_in_background(job_id, work)
+    job_log.run_in_background(job_id, work, current_app._get_current_object())
     return jsonify({"job_id": job_id, "label": f"Walking {hostname}",
                      "redirect": url_for("devices.device_detail", device_id=device_id)})
 
@@ -263,6 +254,9 @@ def walk_device(device_id):
 def repoll_device(device_id):
     device = Device.query.get_or_404(device_id)
     hostname = device.hostname
+    wait = cooldown.check_and_start(device_id)
+    if wait:
+        return jsonify({"error": f"Wait {wait}s before hitting {hostname} again."}), 429
     job_id = job_log.start_job(f"Repolling {hostname}")
 
     def work():
@@ -271,7 +265,7 @@ def repoll_device(device_id):
         if not d.reachable and not _has_snmp_credentials(d):
             job_log.log_line(job_id, "NOTE: no SNMP credentials set — add them on the Edit page.")
 
-    _run_in_background(job_id, work)
+    job_log.run_in_background(job_id, work, current_app._get_current_object())
     return jsonify({"job_id": job_id, "label": f"Repolling {hostname}",
                      "redirect": url_for("devices.device_detail", device_id=device_id)})
 

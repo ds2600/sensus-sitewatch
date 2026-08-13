@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required
 
 from sitewatch.extensions import db
-from sitewatch.models import Circuit, CircuitRole, CircuitWaypoint, Interface, Site, AlertMute, Setting
+from sitewatch.models import Circuit, CircuitRole, CircuitWaypoint, Interface, Device, Site, AlertMute, Setting
+from sitewatch.poller import poll_device_now
+from sitewatch import job_log, cooldown
 
 circuits_bp = Blueprint("circuits", __name__, url_prefix="/circuits")
 
@@ -82,7 +84,9 @@ def _set_lag_interfaces(circuit, form):
 def list_circuits():
     circuits = Circuit.query.filter_by(parent_circuit_id=None).all()
     muted_ids = {c.id for c in circuits if AlertMute.is_muted(c.id)}
-    return render_template("circuits.html", circuits=circuits, muted_ids=muted_ids)
+    unreachable_count = Device.query.filter_by(reachable=False).count()
+    return render_template("circuits.html", circuits=circuits, muted_ids=muted_ids,
+                            unreachable_count=unreachable_count)
 
 
 @circuits_bp.route("/add", methods=["GET", "POST"])
@@ -166,6 +170,42 @@ def circuit_detail(circuit_id):
     )
     return render_template("circuit_detail.html", circuit=circuit, is_muted=is_muted,
                             attachable_circuits=attachable_circuits)
+
+
+@circuits_bp.route("/<int:circuit_id>/repoll", methods=["POST"])
+@login_required
+def repoll_circuit(circuit_id):
+    """The circuit page's Repoll button — only shown there while the
+    circuit is unreachable (see circuit_detail.html). Repolls whichever
+    real device(s) back it: a leaf's interface_a/b devices, or a bundle's
+    own LAG interface devices — a bundle only ever shows "unreachable"
+    via a hard LAG failure (see poller.py's recompute_bundle_state), never
+    from pure member rollup, so the LAG devices are the complete story."""
+    circuit = Circuit.query.get_or_404(circuit_id)
+    ifaces = ([circuit.lag_interface_a, circuit.lag_interface_b] if circuit.is_bundle
+              else [circuit.interface_a, circuit.interface_b])
+    devices = list({i.device_id: i.device for i in ifaces if i}.values())
+    if not devices:
+        return jsonify({"error": "No devices to repoll."}), 400
+    # Peek every device before committing to any — starting device A's
+    # cooldown only to then reject the whole request over device B would
+    # falsely cost device A a wasted 60s wait for a repoll that never ran.
+    for d in devices:
+        wait = cooldown.remaining(d.id)
+        if wait:
+            return jsonify({"error": f"Wait {wait}s before hitting {d.hostname} again."}), 429
+    for d in devices:
+        cooldown.start(d.id)
+
+    job_id = job_log.start_job(f"Repolling {circuit.name}")
+
+    def work():
+        for d in devices:
+            poll_device_now(Device.query.get(d.id))
+
+    job_log.run_in_background(job_id, work, current_app._get_current_object())
+    return jsonify({"job_id": job_id, "label": f"Repolling {circuit.name}",
+                     "redirect": url_for("circuits.circuit_detail", circuit_id=circuit_id)})
 
 
 @circuits_bp.route("/<int:circuit_id>/attach-member", methods=["POST"])

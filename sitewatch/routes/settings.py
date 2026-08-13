@@ -1,18 +1,26 @@
 import json
 from datetime import datetime
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, current_app
 from flask_login import login_required
 
 from sitewatch.extensions import db
-from sitewatch.models import Setting, CircuitRole, Circuit, Region, Site
+from sitewatch.models import Setting, CircuitRole, Circuit, Region, Site, Device
 from sitewatch.integrations import netbox
 from sitewatch.backup import export_data, import_data, BackupImportError, SCOPES
 from sitewatch.poller import (
     get_poller_status, pause_poller, resume_poller, poller_enabled_for_process, reschedule_poller,
+    poll_device_now,
 )
+from sitewatch import job_log, cooldown
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
+
+# Sentinel cooldown target for the repoll-all sweep itself (distinct from
+# any real device id) — stops the sweep action from being re-triggered
+# within 60s, on top of skipping individual devices still on their own
+# cooldown inside the sweep.
+_REPOLL_ALL_TARGET = "repoll_all_unreachable"
 
 
 @settings_bp.route("/", methods=["GET", "POST"])
@@ -34,9 +42,11 @@ def index():
         "duration": Setting.get("last_poll_duration_seconds"),
         "finished_at": Setting.get("last_poll_finished_at"),
     }
+    unreachable_count = Device.query.filter_by(reachable=False).count()
     return render_template("settings.html", values=values, roles=CircuitRole.query.all(),
                             site_regions=Region.query.order_by(Region.name).all(),
-                            poll_stats=poll_stats, poller_status=get_poller_status())
+                            poll_stats=poll_stats, poller_status=get_poller_status(),
+                            unreachable_count=unreachable_count)
 
 
 @settings_bp.route("/activity")
@@ -65,6 +75,47 @@ def poller_stop():
     else:
         flash("Poller not running in this process.")
     return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/repoll-unreachable", methods=["POST"])
+@login_required
+def repoll_unreachable():
+    """Serial (no thread pool) sweep of every currently-unreachable device
+    — deliberately gentler/simpler than the normal concurrent poll cycle
+    (poller.py's poll_all_devices), since this is an operator-triggered,
+    infrequent "did anything come back" check, not the routine cadence.
+    Reuses poll_device_now — the same single-device, no-concurrency path
+    repoll_device already uses — just looped."""
+    wait = cooldown.remaining(_REPOLL_ALL_TARGET)
+    if wait:
+        return jsonify({"error": f"Wait {wait}s before running this again."}), 429
+    devices = Device.query.filter_by(reachable=False).all()
+    if not devices:
+        return jsonify({"error": "No unreachable devices."}), 400
+    cooldown.start(_REPOLL_ALL_TARGET)
+
+    label = f"Repolling {len(devices)} unreachable device(s)"
+    job_id = job_log.start_job(label, total=len(devices))
+    device_ids = [d.id for d in devices]
+
+    def work():
+        for i, device_id in enumerate(device_ids, start=1):
+            # Skip (don't fail the whole sweep over) a device someone just
+            # walked/repolled individually within its own last 60s.
+            if cooldown.remaining(device_id) is None:
+                cooldown.start(device_id)
+                poll_device_now(Device.query.get(device_id))
+            else:
+                job_log.log_line(job_id, f"Skipping device {device_id} — hit within the last minute elsewhere.")
+            job_log.set_progress(job_id, i)
+
+    job_log.run_in_background(job_id, work, current_app._get_current_object())
+    # This button lives on both Settings and the Circuits list — send the
+    # user back to whichever one they clicked it from, not always Settings.
+    next_url = request.args.get("next")
+    if not next_url or not next_url.startswith("/"):
+        next_url = url_for("settings.index")
+    return jsonify({"job_id": job_id, "label": label, "redirect": next_url})
 
 
 @settings_bp.route("/roles/add", methods=["POST"])

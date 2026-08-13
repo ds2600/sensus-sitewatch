@@ -56,17 +56,21 @@
   <!-- Drop an mp3 at sitewatch/static/sound/alert.mp3 and set the src below to enable the ding -->
   <audio id="alert-sound"></audio>
 
-  <!-- Driven by job-modal.js: any button with data-job-url POSTs there to kick off a
-       background job (device walk/repoll), then tails /api/jobs/<id>/log here live.
-       Not dismissible (no backdrop/ESC close) until the job reports done — see
-       job-modal.js for why: this is standing in for the request that used to block
-       synchronously, so closing early would be misleading, not just inconvenient. -->
+  <!-- The Tail Modal — driven by job-modal.js: any button with data-job-url POSTs
+       there to kick off a background job (device walk/repoll, circuit repoll,
+       repoll-all-unreachable), then tails /api/jobs/<id>/log here live, with an
+       optional completed/total counter for jobs that report one (see #job-log-progress).
+       data-confirm on the button asks first, no modal shown on Cancel. Not dismissible
+       (no backdrop/ESC close) until the job reports done — see job-modal.js for why:
+       this is standing in for the request that used to block synchronously, so closing
+       early would be misleading, not just inconvenient. -->
   <div class="modal" id="job-log-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="job-log-title">Working&hellip;</h5>
           <span id="job-log-elapsed" class="text-body-secondary small ms-2"></span>
+          <span id="job-log-progress" class="text-body-secondary small ms-2"></span>
           <button type="button" class="btn-close ms-auto" id="job-log-close-x" aria-label="Close" style="display:none;"></button>
         </div>
         <div class="modal-body">

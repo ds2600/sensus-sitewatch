@@ -72,7 +72,7 @@ stored, from `compute_site_status()`.
   No explaining the "why" in-line, no parenthetical asides, no restating
   what a nearby label already says. This does not apply to job_log.py
   output or Python logging — those are meant to be detailed/technical,
-  since that's the point of the walk/repoll log modal and server logs.
+  since that's the point of the Tail Modal and server logs.
 - No ORM enum types — status/role/vendor values are plain strings,
   validated in Python. Valid sets are the tuples at the top of `models.py`.
 - Credentials (SNMP community/keys, SSH password) are never stored or
@@ -102,6 +102,31 @@ stored, from `compute_site_status()`.
   `status_history`/`alert_mute` relationships, or `Device.interfaces`) so
   deleting the parent actually cleans up its children rather than leaving
   them dangling.
+- **The Tail Modal**: the walk/repoll/background-job progress popup
+  (`#job-log-modal` in `base.html`, driven by `sitewatch/static/js/job-modal.js`)
+  is called the Tail Modal in code comments and conversation — not "the
+  log modal," "the job modal," etc. Any button anywhere gets one for free
+  by adding `data-job-url`/`data-job-label` (POSTs there to start a job,
+  then live-tails `/api/jobs/<id>/log`); add `data-confirm="..."` for a
+  confirm-first action (repoll-all-unreachable's pattern). For a job that
+  processes a known-size batch, pass `total=` to `job_log.start_job()` and
+  call `job_log.set_progress()` per item — the modal shows a
+  `completed/total` counter automatically; a job that never calls
+  `set_progress()` just doesn't show one.
+- **Rate-limit anything that hits real device network traffic**: walk,
+  repoll, and any future action that triggers real SNMP/SSH traffic to a
+  device must go through `sitewatch/cooldown.py` — one 60s cooldown per
+  target device id, shared across whatever different actions target that
+  device (a Walk and a Repoll on the same device count against the same
+  window). Check `cooldown.remaining(id)` for every target *before*
+  committing to any of them if a route touches more than one device (see
+  `circuits.py`'s `repoll_circuit`), then `cooldown.start(id)` for each
+  only once you know the whole action can proceed — starting one target's
+  cooldown and then rejecting the request over a different target wastes
+  that first cooldown window for nothing. This is server-side and
+  authoritative; `job-modal.js` also disables the clicked button
+  client-side for the same 60s as a courtesy (instant feedback, skips the
+  round trip most of the time), but that's not what actually enforces it.
 
 ## End every change with a pull note
 

@@ -71,7 +71,11 @@ def install():
         sitewatch_logger.setLevel(logging.INFO)
 
 
-def start_job(label):
+def start_job(label, total=None):
+    """total: for a job that repeats a step over a known-size batch (e.g.
+    repoll-all-unreachable), the number of items — drives the Tail Modal's
+    completed/total counter via set_progress()/get_job(). None (default)
+    for an ordinary single-step job; the modal shows no counter then."""
     with _lock:
         while len(_jobs) >= _MAX_JOBS:
             _jobs.pop(next(iter(_jobs)))
@@ -84,8 +88,27 @@ def start_job(label):
             "error": None,
             "started_at": time.time(),
             "finished_at": None,
+            "completed": 0,
+            "total": total,
         }
     return job_id
+
+
+def run_in_background(job_id, work, app):
+    """Starts work() (no args) on a daemon thread with `app` bound and its
+    log output routed into job_id (see run_job). The caller returns job_id
+    to the browser immediately — the Tail Modal polls for progress rather
+    than the request blocking for however long work() takes. Shared by
+    every route that kicks off a walk/repoll/repoll-sweep; don't duplicate
+    this thread-spawn in the route modules themselves."""
+    threading.Thread(target=run_job, args=(job_id, work, app), daemon=True).start()
+
+
+def set_progress(job_id, completed):
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is not None:
+            job["completed"] = completed
 
 
 def run_job(job_id, fn, app):
@@ -157,6 +180,8 @@ def get_job(job_id, since=0):
             "success": job["success"],
             "error": job["error"],
             "elapsed": round(elapsed, 1),
+            "completed": job["completed"],
+            "total": job["total"],
         }
 
 

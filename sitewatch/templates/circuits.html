@@ -1,7 +1,10 @@
 {% extends "base.html" %}
-{% from "_macros.html" import util_pct %}
+{% from "_macros.html" import util_pct, repoll_unreachable_button %}
 {% block content %}
-<a class="btn btn-primary mb-3" href="{{ url_for('circuits.add_circuit') }}">Add circuit</a>
+<div class="d-flex gap-2 mb-3">
+  <a class="btn btn-primary" href="{{ url_for('circuits.add_circuit') }}">Add circuit</a>
+  {{ repoll_unreachable_button(unreachable_count) }}
+</div>
 {% if not circuits %}
 <p class="text-body-secondary">No circuits yet. <a href="{{ url_for('circuits.add_circuit') }}">Add the first one</a>.</p>
 {% else %}
