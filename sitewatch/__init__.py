@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from flask import Flask
 from dotenv import load_dotenv
 
@@ -9,7 +10,7 @@ load_dotenv()
 # SemVer. Bump on every user-facing release; GitHub Releases tags match
 # this (vX.Y.Z). Surfaced in the UI footer (see inject_app_name below) so
 # anyone looking at a running instance can tell what's actually deployed.
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 
 def create_app():
@@ -53,7 +54,14 @@ def create_app():
 
     @app.context_processor
     def inject_app_name():
-        return {"app_name": app.config["APP_NAME"], "app_version": __version__}
+        # utc_now: rendered fresh per-request, not pushed via JS — the
+        # bottom-right clock in base.html is deliberately static between
+        # reloads (see global CLAUDE.md's Time rule), so a plain server
+        # timestamp already satisfies it with no client-side timer needed.
+        return {
+            "app_name": app.config["APP_NAME"], "app_version": __version__,
+            "utc_now": datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+        }
 
     @app.template_filter("bps")
     def format_bps(value):
