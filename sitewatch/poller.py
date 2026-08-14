@@ -33,6 +33,7 @@ from sitewatch.extensions import db, scheduler
 from sitewatch.models import Device, Interface, Circuit, CircuitStatusHistory, Setting, Site, UtilizationRollup
 from sitewatch import telemetry
 from sitewatch.snmp import SnmpError
+from sitewatch.snmp import new_engine as new_snmp_engine
 from sitewatch.status import recompute_bundle_state, rollup_degree_status
 from sitewatch.integrations.webhook_payload import send_down_alert
 from sitewatch import job_log
@@ -193,14 +194,27 @@ def _fetch_device_telemetry(snapshot):
     Safe to run in a worker thread: touches nothing but the snapshot and
     telemetry.py/snmp.py's own locals, no ORM/db.session access at all.
     Returns plain data; _apply_fetch_result does the actual ORM writes back
-    on the main thread."""
-    reachable = telemetry.check_reachable(snapshot)
+    on the main thread.
+
+    One SnmpEngine is built here and reused for every GET this device makes
+    this cycle (reachability + each interface's counters), instead of
+    snmp.py's default of one per GET — SnmpEngine() construction is CPU-heavy
+    (dispatcher/security/MIB subsystem setup), and with poller_max_workers
+    devices doing that concurrently every cycle, it was enough GIL
+    contention to make the whole process — including the web UI's request
+    thread — lag during a sweep. Each worker thread here only ever handles
+    one device, so a fresh engine per call to this function is thread-safe
+    without any locking. Skipped entirely under SITEWATCH_SIMULATE=1 — the
+    simulator backend ignores the engine param and never touches the
+    network, so building a real one there is pure waste."""
+    engine = None if os.environ.get("SITEWATCH_SIMULATE") == "1" else new_snmp_engine()
+    reachable = telemetry.check_reachable(snapshot, engine=engine)
     result = {"reachable": reachable, "interfaces": {}}
     if not reachable:
         return result  # interfaces stay at last-known values, same as before
     for iface in snapshot.interfaces:
         try:
-            result["interfaces"][iface.id] = {"data": telemetry.poll_interface_counters(snapshot, iface)}
+            result["interfaces"][iface.id] = {"data": telemetry.poll_interface_counters(snapshot, iface, engine=engine)}
         except SnmpError as e:
             result["interfaces"][iface.id] = {"error": str(e)}
     return result

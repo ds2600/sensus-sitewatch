@@ -89,11 +89,23 @@ def _auth_data(device):
     )
 
 
-def snmp_get(device, oid, timeout=3, retries=1):
+def new_engine():
+    """Constructs a fresh SnmpEngine — deliberately expensive (spins up
+    pysnmp's dispatcher, security/MIB subsystems), so callers doing more
+    than one GET/WALK against the same device in a row should build one of
+    these once and pass it into every call via the `engine` param rather
+    than leaving it to default (which builds a throwaway one per call).
+    See poller.py's _fetch_device_telemetry for the pattern this exists
+    for — creating one per GET was most of what made poll cycles CPU-heavy
+    enough to lag the web process alongside them."""
+    return SnmpEngine()
+
+
+def snmp_get(device, oid, timeout=3, retries=1, engine=None):
     t0 = time.monotonic()
     log.info("GET %s from %s (%s, timeout=%ss retries=%s)",
               _oid_label(oid), device.mgmt_ip, device.snmp_version, timeout, retries)
-    engine = SnmpEngine()
+    engine = engine or new_engine()
     iterator = getCmd(
         engine, _auth_data(device), UdpTransportTarget((device.mgmt_ip, 161), timeout=timeout, retries=retries),
         ContextData(), ObjectType(ObjectIdentity(oid)),
@@ -118,7 +130,7 @@ def snmp_get(device, oid, timeout=3, retries=1):
     return value
 
 
-def snmp_get_multi(device, oids, timeout=3, retries=1):
+def snmp_get_multi(device, oids, timeout=3, retries=1, engine=None):
     """Like snmp_get, but carries every OID in one PDU/round trip instead of
     one call per OID — poll_interface_counters uses this so a single
     interface's oper/admin/in/out counters cost one packet exchange, not
@@ -127,7 +139,7 @@ def snmp_get_multi(device, oids, timeout=3, retries=1):
     t0 = time.monotonic()
     log.info("GET %s from %s (%s, timeout=%ss retries=%s)",
               ", ".join(_oid_label(o) for o in oids), device.mgmt_ip, device.snmp_version, timeout, retries)
-    engine = SnmpEngine()
+    engine = engine or new_engine()
     iterator = getCmd(
         engine, _auth_data(device), UdpTransportTarget((device.mgmt_ip, 161), timeout=timeout, retries=retries),
         ContextData(), *(ObjectType(ObjectIdentity(oid)) for oid in oids),
@@ -150,13 +162,13 @@ def snmp_get_multi(device, oids, timeout=3, retries=1):
     return result
 
 
-def snmp_walk(device, base_oid, timeout=3, retries=1):
+def snmp_walk(device, base_oid, timeout=3, retries=1, engine=None):
     """Returns list of (index, value) tuples, index parsed as int from the
     trailing OID component."""
     t0 = time.monotonic()
     log.info("WALK %s from %s (%s, timeout=%ss retries=%s)",
               _oid_label(base_oid), device.mgmt_ip, device.snmp_version, timeout, retries)
-    engine = SnmpEngine()
+    engine = engine or new_engine()
     results = []
     iterator = nextCmd(
         engine, _auth_data(device), UdpTransportTarget((device.mgmt_ip, 161), timeout=timeout, retries=retries),
@@ -179,10 +191,10 @@ def snmp_walk(device, base_oid, timeout=3, retries=1):
     return results
 
 
-def check_reachable(device):
+def check_reachable(device, engine=None):
     log.info("Checking reachability of %s (%s)...", device.hostname, device.mgmt_ip)
     try:
-        snmp_get(device, OID_SYS_UPTIME)
+        snmp_get(device, OID_SYS_UPTIME, engine=engine)
         log.info("%s is reachable.", device.hostname)
         return True
     except SnmpError as e:
@@ -190,14 +202,15 @@ def check_reachable(device):
         return False
 
 
-def walk_interfaces(device):
+def walk_interfaces(device, engine=None):
     """Full IF-MIB walk. Returns dict keyed by if_index."""
-    descr = dict(snmp_walk(device, OID_IF_DESCR))
-    alias = dict(snmp_walk(device, OID_IF_ALIAS))
-    speed = dict(snmp_walk(device, OID_IF_SPEED))
-    high_speed = dict(snmp_walk(device, OID_IF_HIGH_SPEED))
-    oper = dict(snmp_walk(device, OID_IF_OPER_STATUS))
-    admin = dict(snmp_walk(device, OID_IF_ADMIN_STATUS))
+    engine = engine or new_engine()
+    descr = dict(snmp_walk(device, OID_IF_DESCR, engine=engine))
+    alias = dict(snmp_walk(device, OID_IF_ALIAS, engine=engine))
+    speed = dict(snmp_walk(device, OID_IF_SPEED, engine=engine))
+    high_speed = dict(snmp_walk(device, OID_IF_HIGH_SPEED, engine=engine))
+    oper = dict(snmp_walk(device, OID_IF_OPER_STATUS, engine=engine))
+    admin = dict(snmp_walk(device, OID_IF_ADMIN_STATUS, engine=engine))
 
     out = {}
     for idx, val in descr.items():
@@ -218,7 +231,7 @@ def walk_interfaces(device):
     return out
 
 
-def poll_interface_counters(device, if_index):
+def poll_interface_counters(device, if_index, engine=None):
     """GET (not walk) for a single interface's live status + counters. Used
     on every regular poll cycle — full walks only happen on manual re-walk.
     One combined GET (see snmp_get_multi) instead of four separate ones."""
@@ -226,7 +239,7 @@ def poll_interface_counters(device, if_index):
     oid_admin = f"{OID_IF_ADMIN_STATUS}.{if_index}"
     oid_in = f"{OID_IF_HC_IN_OCTETS}.{if_index}"
     oid_out = f"{OID_IF_HC_OUT_OCTETS}.{if_index}"
-    values = snmp_get_multi(device, [oid_oper, oid_admin, oid_in, oid_out])
+    values = snmp_get_multi(device, [oid_oper, oid_admin, oid_in, oid_out], engine=engine)
     return {
         "oper_status": "up" if str(values[oid_oper]) == "1" else "down",
         "admin_status": "up" if str(values[oid_admin]) == "1" else "down",

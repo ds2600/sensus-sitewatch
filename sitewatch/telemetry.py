@@ -11,15 +11,15 @@ def _simulate():
     return os.environ.get("SITEWATCH_SIMULATE") == "1"
 
 
-def check_reachable(device):
-    return simulator.check_reachable(device) if _simulate() else snmp.check_reachable(device)
+def check_reachable(device, engine=None):
+    return simulator.check_reachable(device) if _simulate() else snmp.check_reachable(device, engine=engine)
 
 
-def walk_interfaces(device):
-    return simulator.walk_interfaces(device) if _simulate() else snmp.walk_interfaces(device)
+def walk_interfaces(device, engine=None):
+    return simulator.walk_interfaces(device) if _simulate() else snmp.walk_interfaces(device, engine=engine)
 
 
-def poll_interface_counters(device, iface):
+def poll_interface_counters(device, iface, engine=None):
     if _simulate():
         return simulator.poll_interface_counters(device, iface)
-    return snmp.poll_interface_counters(device, iface.if_index)
+    return snmp.poll_interface_counters(device, iface.if_index, engine=engine)
