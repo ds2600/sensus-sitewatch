@@ -224,6 +224,30 @@ def delete_site(site_id):
     return redirect(url_for("sites.list_sites"))
 
 
+def _passthrough_transit(site):
+    """For a passthrough site (a cosmetic map waypoint, never a real
+    circuit endpoint): every root circuit whose drawn path — site_a ->
+    effective_waypoints -> site_b, the same path map.js renders — passes
+    through this site, with the immediate neighbor point on each side
+    (which may be the circuit's own A/Z end, if this site is the first or
+    last waypoint) plus the circuit's real A/Z ends regardless. A circuit
+    can in principle route through the same site twice; each occurrence is
+    its own row rather than only reporting the first."""
+    results = []
+    for c in Circuit.query.filter_by(parent_circuit_id=None).all():
+        path = [c.site_a] + [w.site for w in c.effective_waypoints] + [c.site_b]
+        for i, point in enumerate(path):
+            if point and point.id == site.id:
+                results.append({
+                    "circuit": c,
+                    "prev_site": path[i - 1] if i > 0 else None,
+                    "next_site": path[i + 1] if i < len(path) - 1 else None,
+                    "site_a": c.site_a,
+                    "site_b": c.site_b,
+                })
+    return results
+
+
 @sites_bp.route("/<int:site_id>")
 @login_required
 def site_detail(site_id):
@@ -240,9 +264,11 @@ def site_detail(site_id):
         if c.site_a_id_safe() == site_id or c.site_b_id_safe() == site_id
     ]
     intra_site_circuits = [c for c in root_circuits if c.is_intra_site]
+    passthrough_transit = _passthrough_transit(site) if site.site_type == "passthrough" else []
     return render_template(
         "site_detail.html", site=site, status=status, parent_status=parent_status,
         minor_site_statuses=minor_site_statuses,
         devices=site.devices, intra_site_circuits=intra_site_circuits,
         degree_breakdown=site_degree_breakdown(site),
+        passthrough_transit=passthrough_transit,
     )

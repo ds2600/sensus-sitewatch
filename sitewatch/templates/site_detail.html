@@ -25,6 +25,38 @@
 
 {% if site.site_type == 'passthrough' %}
 <p class="text-muted mt-4">Passthrough location — a map waypoint with no equipment installed.</p>
+
+<h5 class="mt-4">Circuits passing through</h5>
+{% if not passthrough_transit %}
+<p class="text-muted">No circuits route through here.</p>
+{% else %}
+<div class="datatable" id="passthrough-transit-table" data-page-size="25">
+<table class="table table-sm">
+  <thead><tr>
+    <th data-sort="circuit">Circuit</th>
+    <th data-sort="state" data-sort-attr="data-value">State</th>
+    <th>Prev &rarr; Next</th>
+    <th data-sort="a_end">A end</th>
+    <th data-sort="z_end">Z end</th>
+  </tr></thead>
+  <tbody>
+    {% for t in passthrough_transit %}
+    <tr>
+      <td><a class="circuit" href="{{ url_for('circuits.circuit_detail', circuit_id=t.circuit.id) }}">{{ t.circuit.name }}</a></td>
+      <td class="state" data-value="{{ t.circuit.current_state }}">{{ circuit_status_badge(t.circuit.current_state) }}</td>
+      <td>
+        {% if t.prev_site %}<a href="{{ url_for('sites.site_detail', site_id=t.prev_site.id) }}">{{ t.prev_site.name }}</a>{% else %}—{% endif %}
+        &rarr;
+        {% if t.next_site %}<a href="{{ url_for('sites.site_detail', site_id=t.next_site.id) }}">{{ t.next_site.name }}</a>{% else %}—{% endif %}
+      </td>
+      <td class="a_end">{% if t.site_a %}<a href="{{ url_for('sites.site_detail', site_id=t.site_a.id) }}">{{ t.site_a.name }}</a>{% else %}—{% endif %}</td>
+      <td class="z_end">{% if t.site_b %}<a href="{{ url_for('sites.site_detail', site_id=t.site_b.id) }}">{{ t.site_b.name }}</a>{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
 {% else %}
 {% if site.minor_sites %}
 <h5 class="mt-4">Minor sites</h5>
