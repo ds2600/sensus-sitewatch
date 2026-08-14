@@ -5,14 +5,28 @@ const CIRCUIT_COLOR = { up: "#198754", degraded: "#ffc107", down: "#dc3545",
                          admin_down: "#6c757d", unreachable: "#0d6efd" };
 
 // Quadratic bezier from p0 to p1, bulging toward a control point offset
-// perpendicular to the p0->p1 line by `magnitude` at the midpoint. p0/p1
-// are untouched — only the middle of the curve moves — so multiple
-// parallel circuits between the same two sites can fan out for visibility
-// without their endpoints drifting off the site markers they connect to.
-function curvedSegment(p0, p1, magnitude, steps = 16) {
+// perpendicular to the p0->p1 line by `offsetFraction * segment length` at
+// the midpoint. p0/p1 are untouched — only the middle of the curve moves —
+// so multiple parallel circuits between the same two sites can fan out for
+// visibility without their endpoints drifting off the site markers they
+// connect to.
+//
+// The offset is a FRACTION of this segment's own length, not a fixed
+// lat/lon amount — a fixed offset (the original approach here) is a fixed
+// real-world distance regardless of how far apart the two points are, so
+// it reads as a big, obvious bulge on a short local segment but is utterly
+// imperceptible on a long haul segment at whatever zoom shows the whole
+// route (both distances live in the same lat/lon space Leaflet renders
+// directly, so a fixed offset really is a fixed number of pixels-at-a-given-
+// zoom relative to the segment's own screen length). Scaling by the
+// segment's own length keeps the visual separation proportionally the same
+// everywhere, at every zoom — this is what fixed the "some overlapping
+// circuits fan out, others on the same map don't" report.
+function curvedSegment(p0, p1, offsetFraction, steps = 16) {
   const dLat = p1[0] - p0[0];
   const dLon = p1[1] - p0[1];
   const len = Math.sqrt(dLat * dLat + dLon * dLon) || 1;
+  const magnitude = offsetFraction * len;
   const control = [
     (p0[0] + p1[0]) / 2 + (-dLon / len) * magnitude,
     (p0[1] + p1[1]) / 2 + (dLat / len) * magnitude,
@@ -30,17 +44,19 @@ function curvedSegment(p0, p1, magnitude, steps = 16) {
 }
 
 // A circuit's full path (site_a -> waypoints -> site_b) as one polyline,
-// but each leg gets its OWN magnitude via magnitudeForLeg(i) instead of one
-// magnitude for the whole line — see the per-segment grouping below this
-// exists for: two circuits with different real endpoints can still share a
-// run of waypoints in the middle, and only THAT shared stretch should fan
-// apart, not the rest of either circuit's route.
-function curvedPathBySegment(points, magnitudeForLeg) {
+// but each leg gets its OWN offset fraction via offsetFractionForLeg(i)
+// instead of one offset for the whole line — see the per-segment grouping
+// below this exists for: two circuits with different real endpoints can
+// still share a run of waypoints in the middle, and only THAT shared
+// stretch should fan apart, not the rest of either circuit's route.
+function curvedPathBySegment(points, offsetFractionForLeg) {
   const latLngs = points.map((p) => [p.lat, p.lon]);
   let path = [];
   for (let i = 0; i < latLngs.length - 1; i++) {
-    const magnitude = magnitudeForLeg(i);
-    const seg = magnitude ? curvedSegment(latLngs[i], latLngs[i + 1], magnitude) : [latLngs[i], latLngs[i + 1]];
+    const offsetFraction = offsetFractionForLeg(i);
+    const seg = offsetFraction
+      ? curvedSegment(latLngs[i], latLngs[i + 1], offsetFraction)
+      : [latLngs[i], latLngs[i + 1]];
     path = path.concat(i === 0 ? seg : seg.slice(1)); // drop duplicate joint point
   }
   return path;
@@ -139,7 +155,9 @@ async function loadMap() {
     const path = curvedPathBySegment(points, (i) => {
       const group = bySegment[segmentKey(points[i], points[i + 1])];
       const idx = group.indexOf(l.id);
-      return (idx - (group.length - 1) / 2) * 0.08;
+      // Fraction of THIS leg's own length, not a fixed lat/lon amount —
+      // see curvedSegment's comment for why that matters.
+      return (idx - (group.length - 1) / 2) * 0.15;
     });
     const utilLabel = l.util_pct != null ? ` — ${l.util_pct}% util` : "";
     L.polyline(path, { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 })
