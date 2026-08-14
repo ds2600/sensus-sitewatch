@@ -76,6 +76,19 @@ def poll_all_devices():
             # as_completed, not submission order — a device finishes as soon as
             # its own fetch does, not gated on slower devices ahead of it.
             for future in as_completed(futures):
+                if job_log.cancel_requested(job_id):
+                    # Only affects futures the pool hasn't started on yet (at
+                    # most max_workers are ever running at once) — those still
+                    # run to completion/timeout, there's no safe way to abort a
+                    # blocking SNMP call already in flight. But nothing beyond
+                    # what's already running starts, which is the actual fix
+                    # for "sweep grinding through every device while I'm on the
+                    # wrong network": wait out what's in flight, then stop dead
+                    # instead of working through the rest of the device list.
+                    for f in futures:
+                        f.cancel()
+                    log.warning("Poll cycle stopped by user after %d device(s).", device_count)
+                    break
                 device = devices_by_id[futures[future]]
                 _apply_fetch_result(device, future.result())
                 # Recompute circuit/bundle state after every device, not once at

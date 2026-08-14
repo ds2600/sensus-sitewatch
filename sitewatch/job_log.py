@@ -85,6 +85,8 @@ def start_job(label, total=None):
             "lines": deque(maxlen=_MAX_LINES_PER_JOB),
             "done": False,
             "success": None,
+            "cancelled": False,
+            "cancel_requested": False,
             "error": None,
             "started_at": time.time(),
             "finished_at": None,
@@ -92,6 +94,37 @@ def start_job(label, total=None):
             "total": total,
         }
     return job_id
+
+
+def request_cancel(job_id):
+    """The Tail Modal's Stop button. Purely a flag — nothing here forcibly
+    kills a thread (Python can't do that safely) or interrupts a blocking
+    SNMP call already in flight. What it DOES do: any loop that checks
+    cancel_requested() between steps (poll_all_devices between devices,
+    repoll_unreachable between devices, repoll_circuit between its 1-2
+    devices) stops moving on to the next one, and poll_all_devices also
+    cancels every not-yet-started device fetch outright. For the exact
+    scenario this exists for — a sweep grinding through many SNMP timeouts
+    because you're on the wrong network — that turns "wait out the whole
+    sweep" into "wait out whatever's already in flight, then stop"."""
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is not None and not job["done"]:
+            job["cancel_requested"] = True
+
+
+def cancel_requested(job_id=None):
+    """job_id omitted: checks the CALLING THREAD's own job (same
+    _current_job_id trick as current_job_id()) — lets polling code deep in
+    poller.py/settings.py check without threading job_id through every
+    call. Pass job_id explicitly when checking from outside that thread
+    (e.g. poll_all_devices checking on behalf of its worker-pool futures)."""
+    jid = job_id if job_id is not None else getattr(_current_job_id, "value", None)
+    if jid is None:
+        return False
+    with _lock:
+        job = _jobs.get(jid)
+        return bool(job and job["cancel_requested"])
 
 
 def run_in_background(job_id, work, app):
@@ -115,13 +148,23 @@ def run_job(job_id, fn, app):
     """Runs fn() (no args) on the calling thread with app context pushed and
     this thread's log records routed into job_id's buffer. Call this as a
     thread's target for UI-triggered jobs, or directly for the scheduled
-    poll job (which already runs on APScheduler's own background thread)."""
+    poll job (which already runs on APScheduler's own background thread).
+
+    fn() doesn't need to raise anything special to report a stop — it just
+    needs to check cancel_requested() at its own safe points and return
+    early like normal completion. Whether that happened is checked here,
+    after fn() returns, so every job type gets consistent "stopped" vs
+    "completed" bookkeeping for free instead of each fn() having to report
+    it itself."""
     _current_job_id.value = job_id
     try:
         with app.app_context():
             try:
                 fn()
-                _finish(job_id, success=True)
+                if cancel_requested(job_id):
+                    _finish(job_id, success=False, cancelled=True, error="Stopped by user.")
+                else:
+                    _finish(job_id, success=True)
             except Exception as e:
                 log.exception("Background job failed")
                 _finish(job_id, success=False, error=str(e))
@@ -154,12 +197,13 @@ def log_line(job_id, message):
     _append(job_id, message)
 
 
-def _finish(job_id, success, error=None):
+def _finish(job_id, success, error=None, cancelled=False):
     with _lock:
         job = _jobs.get(job_id)
         if job is not None:
             job["done"] = True
             job["success"] = success
+            job["cancelled"] = cancelled
             job["error"] = error
             job["finished_at"] = time.time()
 
@@ -178,6 +222,7 @@ def get_job(job_id, since=0):
             "next_index": since + len(new_lines),
             "done": job["done"],
             "success": job["success"],
+            "cancelled": job["cancelled"],
             "error": job["error"],
             "elapsed": round(elapsed, 1),
             "completed": job["completed"],
@@ -197,6 +242,7 @@ def list_jobs(limit=30):
                 "started_at": datetime.utcfromtimestamp(job["started_at"]).isoformat(),
                 "done": job["done"],
                 "success": job["success"],
+                "cancelled": job["cancelled"],
                 "elapsed": round((job["finished_at"] or time.time()) - job["started_at"], 1),
             }
             for job_id, job in items

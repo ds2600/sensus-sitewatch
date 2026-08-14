@@ -76,6 +76,9 @@ function jobStatusBadge(job) {
   if (!job.done) {
     span.className = "badge bg-primary";
     span.textContent = "running";
+  } else if (job.cancelled) {
+    span.className = "badge bg-warning text-dark";
+    span.textContent = "stopped";
   } else {
     span.className = "badge " + (job.success ? "bg-success" : "bg-danger");
     span.textContent = job.success ? "ok" : "failed";

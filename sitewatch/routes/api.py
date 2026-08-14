@@ -104,3 +104,12 @@ def job_log_tail(job_id):
     if job is None:
         return jsonify({"error": "Job not found or expired."}), 404
     return jsonify(job)
+
+
+@api_bp.route("/jobs/<job_id>/cancel", methods=["POST"])
+@login_required
+def job_cancel(job_id):
+    """The Tail Modal's Stop button — see job_log.request_cancel for what
+    this can and can't actually interrupt."""
+    job_log.request_cancel(job_id)
+    return jsonify({"ok": True})

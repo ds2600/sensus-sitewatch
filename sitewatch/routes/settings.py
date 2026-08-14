@@ -102,6 +102,9 @@ def repoll_unreachable():
 
     def work():
         for i, device_id in enumerate(device_ids, start=1):
+            if job_log.cancel_requested(job_id):
+                job_log.log_line(job_id, f"Stopped by user after {i - 1}/{len(device_ids)} device(s).")
+                break
             # Skip (don't fail the whole sweep over) a device someone just
             # walked/repolled individually within its own last 60s.
             if cooldown.remaining(device_id) is None:

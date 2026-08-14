@@ -399,6 +399,9 @@ def repoll_circuit(circuit_id):
 
     def work():
         for d in devices:
+            if job_log.cancel_requested(job_id):
+                job_log.log_line(job_id, "Stopped by user.")
+                break
             poll_device_now(Device.query.get(d.id))
 
     job_log.run_in_background(job_id, work, current_app._get_current_object())

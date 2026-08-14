@@ -11,10 +11,17 @@
 // window disappear mid-operation. Closing afterward reloads the
 // originating page so the device's fresh state (interfaces, reachability,
 // last-polled) is visible without a second manual refresh.
+//
+// The Stop button (#job-log-stop-btn) POSTs to /api/jobs/<id>/cancel —
+// see job_log.request_cancel for what that can and can't actually
+// interrupt. It's a request, not an instant kill: the modal keeps
+// tailing normally until the job itself notices and reports done, same
+// as any other finish.
 let jobStartedAt = null;
 let jobElapsedTimer = null;
 let jobPollTimer = null;
 let jobRedirectUrl = null;
+let currentJobId = null;
 
 function jobModalEl() {
   return document.getElementById("job-log-modal");
@@ -42,10 +49,20 @@ function updateProgress(completed, total) {
   el.textContent = total != null ? `${completed}/${total}` : "";
 }
 
-function finishJob(success, error) {
+function setStopEnabled(enabled) {
+  const stopBtn = document.getElementById("job-log-stop-btn");
+  if (!stopBtn) return;
+  stopBtn.disabled = !enabled;
+  stopBtn.textContent = "Stop";
+}
+
+function finishJob(success, error, cancelled) {
   clearInterval(jobElapsedTimer);
   const statusEl = document.getElementById("job-log-status");
-  if (success) {
+  if (cancelled) {
+    statusEl.textContent = "Stopped.";
+    statusEl.className = "me-auto text-warning";
+  } else if (success) {
     statusEl.textContent = "Completed successfully.";
     statusEl.className = "me-auto text-success";
   } else {
@@ -54,21 +71,26 @@ function finishJob(success, error) {
   }
   document.getElementById("job-log-close-btn").disabled = false;
   document.getElementById("job-log-close-x").style.display = "";
+  setStopEnabled(false);
 }
 
 function pollJobLog(jobId, since) {
   fetch(`/api/jobs/${jobId}/log?since=${since}`)
     .then((r) => r.json())
     .then((data) => {
-      if (data.error) {
+      if (data.done === undefined) {
+        // 404 shape — {"error": "Job not found or expired."}, no other keys —
+        // distinct from a legitimately finished job, which always has `done`
+        // and may ALSO carry a non-null error (a real failure, or "Stopped by
+        // user." for a cancelled one) that the done-branch below handles.
         appendLines([data.error]);
-        finishJob(false, data.error);
+        finishJob(false, data.error, false);
         return;
       }
       appendLines(data.lines);
       updateProgress(data.completed, data.total);
       if (data.done) {
-        finishJob(data.success, data.error);
+        finishJob(data.success, data.error, data.cancelled);
       } else {
         jobPollTimer = setTimeout(() => pollJobLog(jobId, data.next_index), 400);
       }
@@ -91,6 +113,8 @@ function startJob(url, label) {
   document.getElementById("job-log-close-x").style.display = "none";
   updateProgress(0, null);
   jobRedirectUrl = null;
+  currentJobId = null;
+  setStopEnabled(false);  // re-enabled once we actually have a job_id back
   jobStartedAt = Date.now();
   updateElapsed();
   clearInterval(jobElapsedTimer);
@@ -101,17 +125,19 @@ function startJob(url, label) {
     .then((r) => r.json())
     .then((data) => {
       if (data.job_id) {
+        currentJobId = data.job_id;
         jobRedirectUrl = data.redirect || null;
         if (data.label) document.getElementById("job-log-title").textContent = data.label;
+        setStopEnabled(true);
         pollJobLog(data.job_id, 0);
       } else {
         appendLines([data.error || "Failed to start."]);
-        finishJob(false, data.error);
+        finishJob(false, data.error, false);
       }
     })
     .catch((err) => {
       appendLines(["Failed to start: " + err]);
-      finishJob(false, String(err));
+      finishJob(false, String(err), false);
     });
 }
 
@@ -131,6 +157,10 @@ function viewJob(jobId, label) {
   document.getElementById("job-log-close-x").style.display = "none";
   updateProgress(0, null);
   jobRedirectUrl = null;
+  currentJobId = jobId;
+  // Optimistic — if the job turns out to already be done, the first
+  // pollJobLog response below calls finishJob(), which disables this again.
+  setStopEnabled(true);
   jobStartedAt = Date.now();
   updateElapsed();
   clearInterval(jobElapsedTimer);
@@ -151,6 +181,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeX = document.getElementById("job-log-close-x");
   if (closeBtn) closeBtn.addEventListener("click", closeAndReload);
   if (closeX) closeX.addEventListener("click", closeAndReload);
+
+  const stopBtn = document.getElementById("job-log-stop-btn");
+  if (stopBtn) {
+    stopBtn.addEventListener("click", () => {
+      if (!currentJobId || stopBtn.disabled) return;
+      stopBtn.disabled = true;
+      stopBtn.textContent = "Stopping…";
+      fetch(`/api/jobs/${currentJobId}/cancel`, { method: "POST" }).catch(() => {});
+      // No local finishJob() call here — the request only sets a flag
+      // server-side (see job_log.request_cancel); the actual stop happens
+      // whenever the job itself next checks it, and the normal poll loop
+      // above picks up the resulting done:true/cancelled:true same as any
+      // other finish. Re-enabling the button on failure would just let
+      // someone spam it while it's already in flight, for no benefit.
+    });
+  }
 
   // Cosmetic only — the real 60s-per-target rate limit is enforced
   // server-side (sitewatch/cooldown.py), which is what actually stops a
