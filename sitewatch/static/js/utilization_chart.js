@@ -33,10 +33,15 @@
   const tableToggle = document.getElementById("util-table-toggle");
 
   let currentPoints = [];
+  let currentWindowKind = "24h";
   let tableShown = false;
 
-  const W = 640, H = 160, PAD_L = 34, PAD_R = 12, PAD_T = 10, PAD_B = 22;
-  const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
+  // H is fixed (chart height doesn't need to track container width), but W
+  // is measured per-render from the container's actual rendered width — see
+  // the comment in render() for why a fixed W here would leave the chart
+  // stuck narrower than its container.
+  const H = 160, PAD_L = 34, PAD_R = 12, PAD_T = 10, PAD_B = 22;
+  const plotH = H - PAD_T - PAD_B;
 
   function fmtTime(iso, windowKind) {
     const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : "Z"));
@@ -53,12 +58,26 @@
 
   function render(points, windowKind) {
     currentPoints = points;
+    currentWindowKind = windowKind;
     chartEl.innerHTML = "";
     if (!points.length) {
       emptyEl.classList.remove("d-none");
       return;
     }
     emptyEl.classList.add("d-none");
+
+    // viewBox width is measured from the container, not a fixed constant —
+    // width="100%" + a fixed height means the browser's default
+    // preserveAspectRatio scales the viewBox uniformly to fit the *height*
+    // (whose scale factor is always 1, since height is always exactly H),
+    // then centers the result. With a fixed viewBox width that pins the
+    // actual drawing at that many CSS pixels wide forever, regardless of
+    // how wide the container really is — the svg element fills the column,
+    // the chart inside it doesn't. Matching W to clientWidth keeps the
+    // scale factor 1:1 on both axes so the plotted lines actually reach
+    // the container's edges.
+    const W = Math.max(320, Math.round(chartEl.clientWidth)) || 640;
+    const plotW = W - PAD_L - PAD_R;
 
     // Headroom above 100% if a peak actually exceeded capacity — real,
     // worth showing rather than clipping at the top of the chart.
@@ -198,6 +217,17 @@
       if (tableShown) renderTable();
     });
   }
+
+  // Re-render (no refetch — same points already in hand) when the
+  // container's width actually changes, so W stays matched to it instead
+  // of going stale until the next window-toggle click.
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (currentPoints.length) render(currentPoints, currentWindowKind);
+    }, 150);
+  });
 
   load("24h");
 })();

@@ -213,4 +213,15 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => { btn.disabled = false; }, CLIENT_COOLDOWN_MS);
     });
   });
+
+  // Static buttons for an already-running/finished job (e.g. the Poller
+  // tab's "View poller log", which points at whichever job_id
+  // get_poller_status() currently reports — status.js keeps
+  // data-view-job-id in sync as that changes from poll to poll).
+  document.querySelectorAll("[data-view-job-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!btn.dataset.viewJobId) return;
+      viewJob(btn.dataset.viewJobId, btn.dataset.viewJobLabel);
+    });
+  });
 });

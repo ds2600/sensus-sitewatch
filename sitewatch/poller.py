@@ -48,6 +48,13 @@ STARTUP_POLL_JOB_ID = "poll_all_devices_startup"
 # APScheduler's job/next_run_time state alone doesn't capture that.
 _currently_polling = False
 
+# job_log id of the most recently started sweep (scheduled or manual
+# "Poll all now"), kept around after it finishes too — not just while
+# _currently_polling — so the Poller tab's "View poller log" button always
+# has something to open. In-memory like the rest of job_log, so it resets
+# on process restart.
+_last_poll_job_id = None
+
 
 def poll_all_devices():
     """One full sweep: every device's SNMP fetch runs concurrently (up to
@@ -58,7 +65,7 @@ def poll_all_devices():
     last_poll_duration_seconds/last_poll_finished_at, shown on the Settings
     page) so the configured polling_interval_minutes can be checked against
     how long a sweep actually takes."""
-    global _currently_polling
+    global _currently_polling, _last_poll_job_id
     _currently_polling = True
     try:
         started = time.monotonic()
@@ -70,6 +77,11 @@ def poll_all_devices():
 
         max_workers = max(1, Setting.get_int("poller_max_workers"))
         job_id = job_log.current_job_id()  # propagated into worker threads below — see job_log.run_in_job
+        _last_poll_job_id = job_id
+        # Total wasn't known back when start_job() handed out job_id (device
+        # count depends on the query above) — set_total() fills it in now so
+        # the Tail Modal/Poller tab can show a completed/total counter.
+        job_log.set_total(job_id, len(devices_by_id))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = {
                 pool.submit(job_log.run_in_job, job_id, _fetch_device_telemetry, snapshot): device_id
@@ -105,6 +117,7 @@ def poll_all_devices():
                 _recompute_all_circuit_states()
                 db.session.commit()
                 device_count += 1
+                job_log.set_progress(job_id, device_count)
 
         duration = time.monotonic() - started
         Setting.set("last_poll_duration_seconds", f"{duration:.1f}")
@@ -472,24 +485,40 @@ def get_poller_status():
     """Status for the header icon and the Settings page. `state` is one of
     disabled/stopped/waiting/polling; `active` is what the header icon's
     play-vs-stop color should key off. next_run_at lets the UI show exactly
-    when the next cycle is due instead of a vague "waiting"."""
+    when the next cycle is due instead of a vague "waiting". job_id/progress
+    identify the most recently started sweep's job_log entry (running or
+    already finished), so the UI can offer a "View poller log" button and,
+    while state is "polling", show real completed/total progress instead of
+    the next-run countdown running past zero and calling an in-progress
+    sweep "overdue"."""
+    progress = None
+    if _last_poll_job_id:
+        job_entry = job_log.get_job(_last_poll_job_id)
+        if job_entry:
+            progress = {"completed": job_entry["completed"], "total": job_entry["total"]}
+
     if not poller_enabled_for_process():
         return {"state": "disabled", "label": "Not running in this process", "active": False,
-                "next_run_at": None, "interval_minutes": None}
+                "next_run_at": None, "interval_minutes": None,
+                "job_id": _last_poll_job_id, "progress": progress}
     if not scheduler.running:
         return {"state": "stopped", "label": "Stopped", "active": False,
-                "next_run_at": None, "interval_minutes": None}
+                "next_run_at": None, "interval_minutes": None,
+                "job_id": _last_poll_job_id, "progress": progress}
     job = scheduler.get_job(POLLER_JOB_ID)
     interval_minutes = Setting.get_int("polling_interval_minutes")
     if job is None or job.next_run_time is None:
         return {"state": "stopped", "label": "Stopped", "active": False,
-                "next_run_at": None, "interval_minutes": interval_minutes}
+                "next_run_at": None, "interval_minutes": interval_minutes,
+                "job_id": _last_poll_job_id, "progress": progress}
     # APScheduler's next_run_time is tz-aware in the local system timezone;
     # normalize to UTC to match last_poll_finished_at's naive-UTC format
     # elsewhere on the Settings page.
     next_run_at = job.next_run_time.astimezone(timezone.utc).isoformat()
     if _currently_polling:
         return {"state": "polling", "label": "Polling now", "active": True,
-                "next_run_at": next_run_at, "interval_minutes": interval_minutes}
+                "next_run_at": next_run_at, "interval_minutes": interval_minutes,
+                "job_id": _last_poll_job_id, "progress": progress}
     return {"state": "waiting", "label": "Waiting for next cycle", "active": True,
-            "next_run_at": next_run_at, "interval_minutes": interval_minutes}
+            "next_run_at": next_run_at, "interval_minutes": interval_minutes,
+            "job_id": _last_poll_job_id, "progress": progress}

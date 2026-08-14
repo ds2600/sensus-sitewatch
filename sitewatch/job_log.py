@@ -144,6 +144,18 @@ def set_progress(job_id, completed):
             job["completed"] = completed
 
 
+def set_total(job_id, total):
+    """Companion to set_progress(), for a job whose batch size isn't known
+    until after start_job() already handed back a job_id — poll_all_devices
+    doesn't know the device count until its own query runs, so it can't
+    pass total= to start_job() up front the way repoll-all-unreachable
+    does."""
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is not None:
+            job["total"] = total
+
+
 def run_job(job_id, fn, app):
     """Runs fn() (no args) on the calling thread with app context pushed and
     this thread's log records routed into job_id's buffer. Call this as a

@@ -26,9 +26,10 @@
 <p>Role: {{ circuit.role.name }} ({{ circuit.role.tier }}) | Type: {{ 'bundle' if circuit.is_bundle else 'point-to-point' }}</p>
 {% if circuit.effective_waypoints %}
 <p class="text-body-secondary small">
-  Map route: {{ circuit.site_a.name if circuit.site_a }} &rarr;
-  {% for w in circuit.effective_waypoints %}{{ w.site.name }}{{ ' &rarr; ' | safe if not loop.last }}{% endfor %}
-  &rarr; {{ circuit.site_b.name if circuit.site_b }}
+  Map route:
+  {% if circuit.site_a %}<a href="{{ url_for('sites.site_detail', site_id=circuit.site_a.id) }}">{{ circuit.site_a.name }}</a>{% endif %} &rarr;
+  {% for w in circuit.effective_waypoints %}<a href="{{ url_for('sites.site_detail', site_id=w.site.id) }}">{{ w.site.name }}</a>{{ ' &rarr; ' | safe if not loop.last }}{% endfor %}
+  &rarr; {% if circuit.site_b %}<a href="{{ url_for('sites.site_detail', site_id=circuit.site_b.id) }}">{{ circuit.site_b.name }}</a>{% endif %}
   {% if circuit.is_bundle and not circuit.waypoints %}<span class="text-body-secondary">(from a member)</span>{% endif %}
 </p>
 {% endif %}
@@ -94,8 +95,11 @@
   </tbody>
 </table>
 {% else %}
-<p>{{ circuit.interface_a.device.hostname }}:{{ circuit.interface_a.if_descr }} &harr;
-   {{ circuit.interface_b.device.hostname }}:{{ circuit.interface_b.if_descr }}</p>
+<p>
+  <a href="{{ url_for('devices.device_detail', device_id=circuit.interface_a.device.id) }}">{{ circuit.interface_a.device.hostname }}</a>:{{ circuit.interface_a.if_descr }}
+  &harr;
+  <a href="{{ url_for('devices.device_detail', device_id=circuit.interface_b.device.id) }}">{{ circuit.interface_b.device.hostname }}</a>:{{ circuit.interface_b.if_descr }}
+</p>
 {% endif %}
 
 {% if open_incident %}

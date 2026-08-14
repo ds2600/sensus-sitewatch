@@ -35,19 +35,9 @@
 <div class="tab-content" id="settingsTabsContent">
 
   <div class="tab-pane fade show active" id="general" role="tabpanel">
-    <form method="post" class="col-md-6 mt-3">
+    <form method="post" class="col-md-6 mt-3" id="settings-form">
       <div class="mb-3"><label class="form-label">Polling interval (minutes)</label>
         <input class="form-control" name="polling_interval_minutes" value="{{ values.polling_interval_minutes }}">
-        <div class="form-text">
-          {% if poll_stats.finished_at %}
-          Last cycle: {{ poll_stats.duration }}s, finished {{ poll_stats.finished_at }} UTC.
-          {% if poll_stats.duration|float >= (values.polling_interval_minutes|float * 60) %}
-          <span class="text-danger">At/past the configured interval — cycles may be running behind.</span>
-          {% endif %}
-          {% else %}
-          No poll cycle yet.
-          {% endif %}
-        </div>
       </div>
       <div class="mb-3"><label class="form-label">Down threshold (consecutive failed polls)</label>
         <input class="form-control" name="down_threshold_count" value="{{ values.down_threshold_count }}"></div>
@@ -65,11 +55,6 @@
         <input class="form-control" name="incident_number_prefix" value="{{ values.incident_number_prefix }}">
         <div class="form-text">Prefixes SiteWatch's own down-incident numbers (e.g. "{{ values.incident_number_prefix }}-000123"). Only applies going forward — existing incident numbers don't change.</div>
       </div>
-      <div class="mb-3 form-check">
-        <input type="checkbox" class="form-check-input" id="poll_on_startup" name="poll_on_startup" value="1" {{ 'checked' if values.poll_on_startup == '1' }}>
-        <label class="form-check-label" for="poll_on_startup">Poll shortly after startup</label>
-        <div class="form-text">Runs one poll cycle ~15 seconds after the app starts, instead of waiting for the first regular interval. Off by default.</div>
-      </div>
       <button class="btn btn-primary">Save</button>
     </form>
   </div>
@@ -80,7 +65,21 @@
         <span id="poller-status-badge" class="badge {{ 'bg-success' if poller_status.active else 'bg-danger' }}">{{ poller_status.label }}</span>
         {% if poller_status.interval_minutes %}<span class="text-body-secondary">every {{ poller_status.interval_minutes }} min</span>{% endif %}
       </p>
-      <p class="mb-2 small text-body-secondary" id="poller-next-run" data-next-run="{{ poller_status.next_run_at or '' }}"></p>
+      <p class="mb-2 small text-body-secondary" id="poller-next-run"
+         data-next-run="{{ poller_status.next_run_at or '' }}"
+         data-state="{{ poller_status.state }}"
+         data-progress-completed="{{ poller_status.progress.completed if poller_status.progress else '' }}"
+         data-progress-total="{{ poller_status.progress.total if poller_status.progress else '' }}"></p>
+      <div class="form-text mb-3">
+        {% if poll_stats.finished_at %}
+        Last cycle: {{ poll_stats.duration }}s, finished {{ poll_stats.finished_at }} UTC.
+        {% if poll_stats.duration|float >= (values.polling_interval_minutes|float * 60) %}
+        <span class="text-danger">At/past the configured interval — cycles may be running behind.</span>
+        {% endif %}
+        {% else %}
+        No poll cycle yet.
+        {% endif %}
+      </div>
       {% if poller_status.state == 'disabled' %}
       <div class="form-text mb-3">Not running in this process (SITEWATCH_RUN_POLLER not set).</div>
       {% else %}
@@ -93,7 +92,7 @@
         </form>
       </div>
       {% endif %}
-      <div class="d-flex gap-2">
+      <div class="d-flex gap-2 mb-3">
         {% if current_user.is_admin %}
         <button type="button" class="btn btn-outline-primary btn-sm"
                 data-job-url="{{ url_for('settings.poll_all_now', next=request.path) }}"
@@ -103,7 +102,19 @@
         </button>
         {% endif %}
         {{ repoll_unreachable_button(unreachable_count, current_user.is_admin) }}
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="poller-view-log-btn"
+                data-view-job-id="{{ poller_status.job_id or '' }}" data-view-job-label="Poll cycle"
+                {{ 'disabled' if not poller_status.job_id }}>
+          View poller log
+        </button>
       </div>
+      <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="poll_on_startup" name="poll_on_startup" value="1"
+               form="settings-form" {{ 'checked' if values.poll_on_startup == '1' }}>
+        <label class="form-check-label" for="poll_on_startup">Poll shortly after startup</label>
+        <div class="form-text">Runs one poll cycle ~15 seconds after the app starts, instead of waiting for the first regular interval. Off by default.</div>
+      </div>
+      <button class="btn btn-primary btn-sm" form="settings-form">Save</button>
     </div>
   </div>
 

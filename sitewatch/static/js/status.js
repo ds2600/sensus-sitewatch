@@ -20,6 +20,18 @@ function formatCountdown(iso) {
 function updateNextRunDisplays() {
   const el = document.getElementById("poller-next-run");
   if (!el) return;
+  if (el.dataset.state === "polling") {
+    // A sweep in progress means next_run_at is already in the past (the
+    // scheduled fire time that kicked it off) — running the countdown
+    // against it would just say "overdue by Ns", which reads as a
+    // problem when the poller is doing exactly what it should. Show real
+    // status instead: device progress if this cycle reports one (see
+    // poller.py's job_log.set_total/set_progress), else a plain "running".
+    const total = el.dataset.progressTotal;
+    const completed = el.dataset.progressCompleted;
+    el.textContent = total ? `Polling now — ${completed}/${total} device(s)` : "Polling now…";
+    return;
+  }
   const iso = el.dataset.nextRun;
   el.textContent = iso ? `Next poll: ${formatClockTime(iso)} (${formatCountdown(iso)})` : "";
 }
@@ -57,7 +69,12 @@ function updatePoller(poller) {
   if (link) link.title = "Poller: " + poller.label;
 
   const el = document.getElementById("poller-next-run");
-  if (el) el.dataset.nextRun = poller.next_run_at || "";
+  if (el) {
+    el.dataset.nextRun = poller.next_run_at || "";
+    el.dataset.state = poller.state || "";
+    el.dataset.progressCompleted = poller.progress ? poller.progress.completed : "";
+    el.dataset.progressTotal = poller.progress ? poller.progress.total : "";
+  }
   updateNextRunDisplays();
 
   const badge = document.getElementById("poller-status-badge");
@@ -69,6 +86,12 @@ function updatePoller(poller) {
     const isStart = btn.dataset.pollerToggle === "start";
     btn.disabled = poller.state === "disabled" || (isStart ? poller.active : !poller.active);
   });
+
+  const viewLogBtn = document.getElementById("poller-view-log-btn");
+  if (viewLogBtn) {
+    viewLogBtn.dataset.viewJobId = poller.job_id || "";
+    viewLogBtn.disabled = !poller.job_id;
+  }
 }
 
 function jobStatusBadge(job) {
