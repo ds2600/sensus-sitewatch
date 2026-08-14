@@ -62,11 +62,32 @@ function curvedPathBySegment(points, offsetFractionForLeg) {
   return path;
 }
 
+function pointKey(p) {
+  return p.lat + "," + p.lon;
+}
+
 // Sorted-pair key identifying a segment regardless of which end is p0/p1 —
 // same site pair, same key, whichever circuit's path traverses it in
 // whichever direction.
 function segmentKey(p0, p1) {
-  return [p0.lat + "," + p0.lon, p1.lat + "," + p1.lon].sort().join("|");
+  return [pointKey(p0), pointKey(p1)].sort().join("|");
+}
+
+// +1 if this leg's own p0->p1 traversal already matches the segment's
+// canonical (sorted) point order, -1 if it's reversed. Which end a circuit
+// calls "site_a" vs "site_b" (or which way its waypoints are ordered) is
+// arbitrary per circuit — two circuits sharing the exact same physical
+// segment can easily store it in opposite directions. curvedSegment's
+// bulge direction is a 90-degree rotation of p0->p1, so without this a
+// "forward" circuit and a "reversed" circuit sharing a segment get
+// assigned opposite offsetFractions that, combined with their opposite
+// direction vectors, land on the SAME side instead of opposite ones —
+// their curves end up exactly on top of each other rather than fanned
+// apart. Multiplying the offset by this sign re-anchors every circuit's
+// bulge to the same canonical side regardless of its own storage
+// direction, so circuits sharing a segment always fan out consistently.
+function segmentDirectionSign(p0, p1) {
+  return pointKey(p0) <= pointKey(p1) ? 1 : -1;
 }
 
 // Deliberately well short of the full viewport — a map that fills nearly
@@ -156,8 +177,13 @@ async function loadMap() {
       const group = bySegment[segmentKey(points[i], points[i + 1])];
       const idx = group.indexOf(l.id);
       // Fraction of THIS leg's own length, not a fixed lat/lon amount —
-      // see curvedSegment's comment for why that matters.
-      return (idx - (group.length - 1) / 2) * 0.15;
+      // see curvedSegment's comment for why that matters. Multiplied by
+      // segmentDirectionSign so every circuit sharing this segment fans
+      // out relative to the same canonical side, regardless of which
+      // direction each one happens to traverse it in — see that
+      // function's comment for why that's necessary.
+      const sign = segmentDirectionSign(points[i], points[i + 1]);
+      return (idx - (group.length - 1) / 2) * 0.15 * sign;
     });
     const utilLabel = l.util_pct != null ? ` — ${l.util_pct}% util` : "";
     L.polyline(path, { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 })
