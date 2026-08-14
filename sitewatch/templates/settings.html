@@ -65,6 +65,11 @@
         <input class="form-control" name="incident_number_prefix" value="{{ values.incident_number_prefix }}">
         <div class="form-text">Prefixes SiteWatch's own down-incident numbers (e.g. "{{ values.incident_number_prefix }}-000123"). Only applies going forward — existing incident numbers don't change.</div>
       </div>
+      <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="poll_on_startup" name="poll_on_startup" value="1" {{ 'checked' if values.poll_on_startup == '1' }}>
+        <label class="form-check-label" for="poll_on_startup">Poll shortly after startup</label>
+        <div class="form-text">Runs one poll cycle ~15 seconds after the app starts, instead of waiting for the first regular interval. Off by default.</div>
+      </div>
       <button class="btn btn-primary">Save</button>
     </form>
   </div>
@@ -88,7 +93,17 @@
         </form>
       </div>
       {% endif %}
-      {{ repoll_unreachable_button(unreachable_count, current_user.is_admin) }}
+      <div class="d-flex gap-2">
+        {% if current_user.is_admin %}
+        <button type="button" class="btn btn-outline-primary btn-sm"
+                data-job-url="{{ url_for('settings.poll_all_now', next=request.path) }}"
+                data-job-label="Polling all devices"
+                data-confirm="Poll every device now? This hits the network for all of them.">
+          Poll all now
+        </button>
+        {% endif %}
+        {{ repoll_unreachable_button(unreachable_count, current_user.is_admin) }}
+      </div>
     </div>
   </div>
 

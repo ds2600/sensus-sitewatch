@@ -37,7 +37,25 @@
 {% set capacity = circuit.effective_capacity_bps %}
 <p class="mb-1">{{ circuit.flow_out_label }}: {{ circuit.current_out_bps | bps }}</p>
 <p class="mb-1">{{ circuit.flow_in_label }}: {{ circuit.current_in_bps | bps }}</p>
-<p class="mb-4">Capacity {{ capacity | bps }} / {{ util_pct(circuit.current_in_bps, circuit.current_out_bps, capacity) }}</p>
+<p class="mb-3">Capacity {{ capacity | bps }} / {{ util_pct(circuit.current_in_bps, circuit.current_out_bps, capacity) }}</p>
+
+{% if capacity %}
+<div class="mb-4" id="util-history" data-circuit-id="{{ circuit.id }}" data-threshold="{{ circuit.utilization_threshold_pct or '' }}">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-outline-secondary active" data-window="24h">24h</button>
+      <button type="button" class="btn btn-outline-secondary" data-window="7d">7d</button>
+    </div>
+    <a href="#" class="small ms-2" id="util-table-toggle">View as table</a>
+  </div>
+  <div id="util-chart-container"></div>
+  <p class="text-body-secondary small d-none" id="util-empty">No utilization history yet — data builds up as poll cycles run.</p>
+  <table class="table table-sm d-none mt-2" id="util-table">
+    <thead><tr><th>Period</th><th>Avg</th><th>Peak</th></tr></thead>
+    <tbody id="util-table-body"></tbody>
+  </table>
+</div>
+{% endif %}
 
 {% if circuit.is_bundle %}
 <div class="d-flex align-items-center gap-2 mb-2">
@@ -107,8 +125,11 @@
 {% endif %}
 {% endblock %}
 
-{% if attachable_circuits and current_user.is_admin %}
 {% block scripts %}
+{% if circuit.effective_capacity_bps %}
+<script src="{{ url_for('static', filename='js/utilization_chart.js') }}"></script>
+{% endif %}
+{% if attachable_circuits and current_user.is_admin %}
 <script src="{{ url_for('static', filename='js/searchable_select.js') }}"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -128,5 +149,5 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 </script>
-{% endblock %}
 {% endif %}
+{% endblock %}

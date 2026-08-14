@@ -11,6 +11,18 @@ from sitewatch import job_log
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
+def _util_pct(circuit):
+    """Same formula as the util_pct Jinja macro (_macros.html) — max of
+    in/out over effective capacity — kept in sync by hand since one's
+    Python and the other's Jinja. None if there's no capacity set or no
+    numeric reading yet, matching the macro's "-" case."""
+    capacity = circuit.effective_capacity_bps
+    peak = [v for v in (circuit.current_in_bps, circuit.current_out_bps) if v is not None]
+    if not capacity or not peak:
+        return None
+    return round(max(peak) / capacity * 100)
+
+
 @api_bp.route("/map")
 @login_required
 def map_data():
@@ -26,7 +38,7 @@ def map_data():
             continue
         lines.append({
             "id": c.id, "name": c.name, "state": c.current_state,
-            "role": c.role.name, "tier": c.role.tier,
+            "role": c.role.name, "tier": c.role.tier, "util_pct": _util_pct(c),
             "site_a": {"lat": a.lat, "lon": a.lon}, "site_b": {"lat": b.lat, "lon": b.lon},
             # Cosmetic only — bends the drawn line through these points, in
             # order, between site_a and site_b. Doesn't affect status/roll-up.

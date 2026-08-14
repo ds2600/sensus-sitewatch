@@ -111,6 +111,12 @@
     <input class="form-control" name="capacity_override" value="{{ prefill.capacity_bps_override if prefill and prefill.capacity_bps_override else '' }}">
   </div>
 
+  <div class="mb-3"><label class="form-label">Utilization threshold % (optional)</label>
+    <input class="form-control" style="max-width:8rem" type="number" min="1" max="100" name="utilization_threshold_pct"
+           value="{{ prefill.utilization_threshold_pct if prefill and prefill.utilization_threshold_pct else '' }}">
+    <div class="form-text">Not monitored yet — reserved for an upcoming utilization-alerting feature.</div>
+  </div>
+
   <div class="mb-3">
     <label class="form-label">Waypoints</label>
     <div class="form-text mt-0 mb-2">Cosmetic — bends the map line. Drag to reorder.</div>

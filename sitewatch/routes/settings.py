@@ -11,17 +11,18 @@ from sitewatch.integrations import netbox
 from sitewatch.backup import export_data, import_data, BackupImportError, SCOPES
 from sitewatch.poller import (
     get_poller_status, pause_poller, resume_poller, poller_enabled_for_process, reschedule_poller,
-    poll_device_now,
+    poll_device_now, poll_all_devices,
 )
 from sitewatch import job_log, cooldown
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
 
-# Sentinel cooldown target for the repoll-all sweep itself (distinct from
-# any real device id) — stops the sweep action from being re-triggered
-# within 60s, on top of skipping individual devices still on their own
-# cooldown inside the sweep.
+# Sentinel cooldown targets for the two sweep-everything actions
+# (distinct from any real device id) — stop either from being
+# re-triggered within 60s, on top of each individual device's own
+# cooldown inside a sweep.
 _REPOLL_ALL_TARGET = "repoll_all_unreachable"
+_POLL_ALL_TARGET = "poll_all_now"
 
 
 @settings_bp.route("/", methods=["GET", "POST"])
@@ -30,8 +31,11 @@ def index():
     if request.method == "POST":
         old_interval = Setting.get("polling_interval_minutes")
         for key in Setting.DEFAULTS:
+            if key == "poll_on_startup":
+                continue  # checkbox — unchecked means absent from request.form entirely, handled below
             if key in request.form:
                 Setting.set(key, request.form[key])
+        Setting.set("poll_on_startup", "1" if request.form.get("poll_on_startup") else "0")
         db.session.commit()
         new_interval = request.form.get("polling_interval_minutes")
         if new_interval and new_interval != old_interval:
@@ -117,6 +121,29 @@ def repoll_unreachable():
     job_log.run_in_background(job_id, work, current_app._get_current_object())
     # This button lives on both Settings and the Circuits list — send the
     # user back to whichever one they clicked it from, not always Settings.
+    next_url = request.args.get("next")
+    if not next_url or not next_url.startswith("/"):
+        next_url = url_for("settings.index")
+    return jsonify({"job_id": job_id, "label": label, "redirect": next_url})
+
+
+@settings_bp.route("/poll-all-now", methods=["POST"])
+@admin_required
+def poll_all_now():
+    """Manual "run a poll cycle right now" — the same poll_all_devices()
+    the scheduled interval job uses (full concurrent sweep, up to
+    poller_max_workers at once), just triggered on demand instead of
+    waiting out polling_interval_minutes. Complements the poll_on_startup
+    setting rather than replacing it — this is for "I don't want to wait"
+    any time, not just right after a restart."""
+    wait = cooldown.remaining(_POLL_ALL_TARGET)
+    if wait:
+        return jsonify({"error": f"Wait {wait}s before running this again."}), 429
+    cooldown.start(_POLL_ALL_TARGET)
+
+    label = "Poll all devices (manual)"
+    job_id = job_log.start_job(label)
+    job_log.run_in_background(job_id, poll_all_devices, current_app._get_current_object())
     next_url = request.args.get("next")
     if not next_url or not next_url.startswith("/"):
         next_url = url_for("settings.index")

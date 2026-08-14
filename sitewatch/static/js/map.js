@@ -141,8 +141,9 @@ async function loadMap() {
       const idx = group.indexOf(l.id);
       return (idx - (group.length - 1) / 2) * 0.08;
     });
+    const utilLabel = l.util_pct != null ? ` — ${l.util_pct}% util` : "";
     L.polyline(path, { color: CIRCUIT_COLOR[l.state] || "#000", weight: 4 })
-      .bindPopup(`<a href="/circuits/${l.id}">${l.name}</a> (${l.role})`).addTo(map);
+      .bindPopup(`<a href="/circuits/${l.id}">${l.name}</a> (${l.role})${utilLabel}`).addTo(map);
   });
 
   // Passthrough markers first and deliberately muted (small, translucent,

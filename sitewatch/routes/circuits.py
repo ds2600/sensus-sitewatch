@@ -10,6 +10,7 @@ from sitewatch.models import (
 from sitewatch.poller import poll_device_now
 from sitewatch import job_log, cooldown
 from sitewatch.csv_import import parse_csv, CsvImportError
+from sitewatch.utilization import circuit_utilization_history
 
 circuits_bp = Blueprint("circuits", __name__, url_prefix="/circuits")
 
@@ -130,6 +131,8 @@ def add_circuit():
             _set_lag_interfaces(circuit, f)
         if f.get("capacity_override"):
             circuit.capacity_bps_override = int(f["capacity_override"])
+        if f.get("utilization_threshold_pct"):
+            circuit.utilization_threshold_pct = int(f["utilization_threshold_pct"])
         _set_waypoints(circuit, f)
         db.session.add(circuit)
         db.session.commit()
@@ -347,6 +350,17 @@ def circuit_detail(circuit_id):
                             open_incident=open_incident, attachable_circuits=attachable_circuits)
 
 
+@circuits_bp.route("/<int:circuit_id>/utilization-history")
+@login_required
+def utilization_history(circuit_id):
+    circuit = Circuit.query.get_or_404(circuit_id)
+    if request.args.get("window") == "7d":
+        points = circuit_utilization_history(circuit, hours=24 * 7, bucket="day")
+    else:
+        points = circuit_utilization_history(circuit, hours=24, bucket="hour")
+    return jsonify({"points": points, "threshold_pct": circuit.utilization_threshold_pct})
+
+
 @circuits_bp.route("/incidents")
 @login_required
 def list_incidents():
@@ -443,6 +457,9 @@ def edit_circuit(circuit_id):
             return redirect(url_for("circuits.edit_circuit", circuit_id=circuit_id))
         circuit.parent_circuit_id = new_parent
         circuit.capacity_bps_override = int(f["capacity_override"]) if f.get("capacity_override") else None
+        circuit.utilization_threshold_pct = (
+            int(f["utilization_threshold_pct"]) if f.get("utilization_threshold_pct") else None
+        )
         if circuit.is_bundle:
             _set_lag_interfaces(circuit, f)
         _set_waypoints(circuit, f)

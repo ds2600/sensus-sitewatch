@@ -30,7 +30,7 @@ import os
 import time
 
 from sitewatch.extensions import db, scheduler
-from sitewatch.models import Device, Interface, Circuit, CircuitStatusHistory, Setting, Site
+from sitewatch.models import Device, Interface, Circuit, CircuitStatusHistory, Setting, Site, UtilizationRollup
 from sitewatch import telemetry
 from sitewatch.snmp import SnmpError
 from sitewatch.status import recompute_bundle_state, rollup_degree_status
@@ -40,6 +40,7 @@ from sitewatch import job_log
 log = logging.getLogger(__name__)
 
 POLLER_JOB_ID = "poll_all_devices"
+STARTUP_POLL_JOB_ID = "poll_all_devices_startup"
 
 # Set for the duration of an actual sweep so get_poller_status() can tell
 # "waiting for next cycle" apart from "sweep in progress right now" —
@@ -233,6 +234,7 @@ def _apply_fetch_result(device, result):
             if elapsed > 0 and iface.last_in_octets is not None:
                 iface.last_in_bps = max(0, (data["in_octets"] - iface.last_in_octets) * 8 / elapsed)
                 iface.last_out_bps = max(0, (data["out_octets"] - iface.last_out_octets) * 8 / elapsed)
+                _update_utilization_rollup(iface, now)
 
         iface.last_in_octets = data["in_octets"]
         iface.last_out_octets = data["out_octets"]
@@ -240,6 +242,33 @@ def _apply_fetch_result(device, result):
         iface.oper_status = data["oper_status"]
         iface.admin_status = data["admin_status"]
         iface.last_polled_at = now
+
+
+def _update_utilization_rollup(iface, now):
+    """Feeds this poll's freshly-computed last_in_bps/last_out_bps into the
+    current hour's UtilizationRollup row for this interface, creating that
+    row if this is the hour's first sample. See UtilizationRollup's
+    docstring (models.py) for why this happens here, incrementally, rather
+    than via a separate scheduled aggregation job."""
+    period_start = now.replace(minute=0, second=0, microsecond=0)
+    row = UtilizationRollup.query.filter_by(
+        interface_id=iface.id, period_type="hourly", period_start=period_start
+    ).first()
+    if row is None:
+        # sample_count=0 explicitly — the column's default=0 only applies
+        # at INSERT flush time, not to this in-memory object yet, and it's
+        # read immediately below.
+        row = UtilizationRollup(interface_id=iface.id, period_type="hourly", period_start=period_start,
+                                 avg_in_bps=0.0, avg_out_bps=0.0, peak_in_bps=0.0, peak_out_bps=0.0,
+                                 sample_count=0)
+        db.session.add(row)
+
+    count = row.sample_count
+    row.avg_in_bps = (row.avg_in_bps * count + iface.last_in_bps) / (count + 1)
+    row.avg_out_bps = (row.avg_out_bps * count + iface.last_out_bps) / (count + 1)
+    row.peak_in_bps = max(row.peak_in_bps, iface.last_in_bps)
+    row.peak_out_bps = max(row.peak_out_bps, iface.last_out_bps)
+    row.sample_count = count + 1
 
 
 def _poll_device(device, monitored_ids=None):
@@ -367,6 +396,7 @@ def start_poller(app):
         interval = Setting.query.get("polling_interval_minutes")
         minutes = int(interval.value) if interval else 2
         enabled = Setting.get("poller_enabled", "1") != "0"
+        poll_on_startup = Setting.get("poll_on_startup", "0") == "1"
 
     def job():
         job_id = job_log.start_job("Poll cycle")
@@ -378,6 +408,16 @@ def start_poller(app):
         # Restore whatever start/stop state was last set from the UI —
         # otherwise a stopped poller would silently come back on restart.
         scheduler.pause_job(POLLER_JOB_ID)
+    elif poll_on_startup:
+        # IntervalTrigger's first fire is a full interval out, not
+        # immediate (confirmed against APScheduler's own
+        # get_next_fire_time) — after a long outage that means staring at
+        # stale data for up to polling_interval_minutes after the app is
+        # already back up. This one-off "date" job runs once, shortly
+        # after startup, independent of the regular interval schedule
+        # (which keeps ticking on its own normal cadence regardless).
+        scheduler.add_job(job, "date", run_date=datetime.now() + timedelta(seconds=15),
+                           id=STARTUP_POLL_JOB_ID, replace_existing=True)
 
 
 def poller_enabled_for_process():

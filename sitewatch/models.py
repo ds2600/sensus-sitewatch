@@ -53,6 +53,7 @@ class Setting(db.Model):
         "status_history_retention_days": "30",
         "poller_max_workers": "8",
         "incident_number_prefix": "INC",
+        "poll_on_startup": "0",
     }
 
     @staticmethod
@@ -229,6 +230,12 @@ class Circuit(db.Model):
     lag_interface_b_id = db.Column(db.Integer, db.ForeignKey("interface.id"), nullable=True)
 
     capacity_bps_override = db.Column(db.BigInteger, nullable=True)
+
+    # Null = not monitored for utilization. Not acted on yet (no incident
+    # gets raised when crossed) — settable now so it's ready for that once
+    # built; see util_pct in routes/api.py for the same "current usage /
+    # effective capacity" math this will eventually compare against.
+    utilization_threshold_pct = db.Column(db.Integer, nullable=True)
 
     current_state = db.Column(db.String(20), default="up")
     consecutive_fail_count = db.Column(db.Integer, default=0)
@@ -413,6 +420,19 @@ class CircuitStatusHistory(db.Model):
 
 
 class UtilizationRollup(db.Model):
+    """Hourly only — a "daily" row is never written; the 7-day history view
+    aggregates hourly rows on the fly at display time instead of maintaining
+    a second accumulation path. period_type stays on the model as forward
+    room, not because anything produces "daily" rows today.
+
+    Updated incrementally, once per poll cycle, by
+    poller.py's _update_utilization_rollup — not a separate scheduled job.
+    There's no raw per-poll sample history anywhere (Interface only ever
+    holds its LATEST last_in_bps/last_out_bps), so an hour's avg/peak has
+    to be built up sample-by-sample as polls land, not computed after the
+    fact from stored samples. sample_count is what makes avg_*_bps a real
+    running mean (avg = avg + (sample - avg) / count) instead of a rough
+    approximation."""
     id = db.Column(db.Integer, primary_key=True)
     interface_id = db.Column(db.Integer, db.ForeignKey("interface.id"), nullable=False)
     period_type = db.Column(db.String(10), nullable=False)  # hourly | daily
@@ -421,6 +441,7 @@ class UtilizationRollup(db.Model):
     avg_out_bps = db.Column(db.Float)
     peak_in_bps = db.Column(db.Float)
     peak_out_bps = db.Column(db.Float)
+    sample_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
     __table_args__ = (db.UniqueConstraint("interface_id", "period_type", "period_start"),)
 
