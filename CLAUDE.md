@@ -214,21 +214,27 @@ practice:
 
 ## Known gaps / not yet built
 
-- No automated test suite exists yet — verification so far has been manual
-  runs against simulate mode (see README section 14), not pytest or similar.
-- Utilization rollup (`UtilizationRollup` model exists) has no scheduled
-  job writing to it yet — poller.py updates live `last_in_bps`/`last_out_bps`
-  on `Interface` but doesn't roll those into hourly/daily aggregates.
+- A `pytest` suite exists under `tests/` (run with `pytest`, needs
+  `pip install -r requirements-dev.txt`) covering `status.py`'s rollup
+  rules, `audit_log.py`, poller alert-batching, backup export/import
+  round-tripping, and CRUD + delete-guard behavior for the main route
+  modules — not exhaustive coverage of every route/branch yet, so treat
+  it as a growing regression net, not a substitute for manual
+  verification against simulate mode (README section 14) on anything it
+  doesn't already cover.
 - NAPALM-based bundle/LAG auto-suggestion (manual confirm/reject) is not
   implemented — `napalm` is in requirements.txt for this but unused so far.
 - Status history retention (`status_history_retention_days` setting) is
-  stored but nothing prunes old `CircuitStatusHistory` rows yet.
+  stored but nothing prunes old `CircuitStatusHistory` rows yet — contrast
+  with `audit_log_retention_days`, which does have a real daily prune job
+  (`audit_log.prune_old_entries()`, scheduled in `poller.py`).
 - No automated migration tool (Alembic etc.) — schema changes currently
   mean editing `models.py` and re-running `flask init-db` against a fresh
   database, or hand-writing SQLite `ALTER TABLE` statements.
 - A site going fully unreachable (blue) doesn't fire a distinct alert —
-  only individual circuit down-transitions trigger `send_down_alert`.
-  Worth deciding whether that's acceptable or needs its own alert path.
+  only individual circuit down-transitions trigger `send_down_alerts`
+  (`sitewatch/integrations/webhook_payload.py`). Worth deciding whether
+  that's acceptable or needs its own alert path.
 - Utilization display (device detail page) is a raw computed percentage
   with no smoothing — a single noisy poll can show a spike that a rollup
   average would have hidden. Cosmetic until rollups exist.
@@ -258,3 +264,17 @@ poking at routes/templates without wanting live SNMP polling running.
 For running this as a persistent service instead (gunicorn + systemd +
 reverse proxy), see README.md section 15 and the example configs in
 `deploy/`.
+
+## Running the test suite
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Each test gets its own throwaway SQLite file (`tests/conftest.py`'s `app`
+fixture) and runs with `SITEWATCH_SIMULATE=1`, so nothing touches real
+SNMP/network devices and nothing touches a developer's real `.env`/DB.
+`tests/factories.py` has the shared Site/Device/Interface/Circuit
+builders — reuse those instead of constructing ORM objects by hand in a
+new test.

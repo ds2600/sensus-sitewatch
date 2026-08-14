@@ -8,3 +8,5 @@ instance/*.db-shm
 instance/*.db-wal
 .DS_Store
 *.egg-info/
+.pytest_cache/
+

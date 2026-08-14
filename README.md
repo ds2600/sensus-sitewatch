@@ -253,15 +253,19 @@ the instant you load the page — you don't have to wait on the scheduler.
 `SITEWATCH_RUN_POLLER=1` on the `run` command is still worth setting so
 things keep updating live afterward (e.g. to watch a mute expire).
 
-`seed-demo` builds 4 sites, 6 devices, and a handful of circuits scripted
-to hit every status color:
+`seed-demo` builds 6 sites (including a passthrough waypoint and a minor
+site), 7 devices, and a handful of circuits scripted to hit every status
+color:
 
 | What you'll see | Why |
 |---|---|
 | Chicago DC / Denver DC: yellow | Core bundle between them is fully up (critical), but an auxiliary office link is down — demonstrates auxiliary failures cap at yellow, never red |
 | Austin DC: red | Single critical circuit to Chicago, down, no redundancy |
 | Phoenix DC: blue, with a blue line to Denver | Device tagged unreachable — demonstrates both the whole-site-unreachable case and an unreachable circuit rendering on the map, not just an isolated site |
+| Chicago Annex: green, parent (Chicago DC) is yellow | Minor site — its own circuit to Austin is up, so it reads green even though its parent is yellow, demonstrating that a minor site's status is its own, and that the parent cascade only forces red for a red/blue parent, never a merely-yellow one |
 | CHI-DEN-Office-Backup circuit: gray | Tagged admin-down — excluded from status math entirely |
+| Rocky Mountain Relay (passthrough site): "Circuits passing through" shows CHI-DEN-Core | The bundle is waypointed through it — demonstrates the map line bending through a passthrough site and that site's own transit list |
+| Chicago Annex: "Circuits passing through" shows CHI-AUS-Core | CHI-AUS-Core is waypointed through Chicago Annex too — demonstrates a major/minor site's own transit list, not just a passthrough site's |
 | One core bundle member: high but not alarming utilization | Demonstrates the utilization numbers on the device detail page without needing real traffic |
 
 `SITEWATCH_SIMULATE=1` must be set for both `seed-demo` and `flask run` —
