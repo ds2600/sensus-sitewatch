@@ -25,7 +25,13 @@
   </div>
 
   {% set effective_parent_id = circuit.parent_circuit_id if circuit else preselected_parent_id %}
-  <div class="mb-3"><label class="form-label">Parent bundle</label>
+  {% if not (circuit and circuit.is_bundle) %}
+  {# A bundle can't itself belong to another bundle — see routes/circuits.py's
+     validation, which is what actually enforces this. Hidden entirely when
+     editing an existing bundle (its type can't change); toggled off below
+     when checking "Bundle" on the add form. #}
+  <div class="mb-3" id="parent-bundle-field">
+    <label class="form-label">Parent bundle</label>
     <div class="dropdown">
       <input class="form-control" id="parent_search" placeholder="None" autocomplete="off"
              value="{{ (bundles_for_form | selectattr('id', 'equalto', effective_parent_id) | first).label if effective_parent_id else '' }}">
@@ -34,6 +40,7 @@
     <input type="hidden" name="parent_circuit_id" id="parent_circuit_id" value="{{ effective_parent_id or '' }}">
     <script id="bundles-data" type="application/json">{{ bundles_for_form | tojson }}</script>
   </div>
+  {% endif %}
 
   <script id="devices-data" type="application/json">{{ devices_for_form | tojson }}</script>
   <script id="interfaces-by-device-data" type="application/json">{{ interfaces_by_device | tojson }}</script>
@@ -43,8 +50,11 @@
     <input class="form-check-input" type="checkbox" name="is_bundle" id="is_bundle"
            {{ 'checked' if duplicate_source and duplicate_source.is_bundle }}
            onchange="document.getElementById('leaf-fields').classList.toggle('d-none', this.checked);
-                     document.getElementById('bundle-fields').classList.toggle('d-none', !this.checked);">
-    <label class="form-check-label" for="is_bundle">Bundle (no interfaces of its own)</label>
+                     document.getElementById('bundle-fields').classList.toggle('d-none', !this.checked);
+                     document.getElementById('parent-bundle-field').classList.toggle('d-none', this.checked);
+                     if (this.checked) { document.getElementById('parent_search').value = '';
+                                          document.getElementById('parent_circuit_id').value = ''; }">
+    <label class="form-check-label" for="is_bundle">Bundle (no interfaces of its own — can't itself belong to another bundle)</label>
   </div>
   <div id="leaf-fields" class="{{ 'd-none' if duplicate_source and duplicate_source.is_bundle }}">
     {% set pre_device_a_label = (prefill_device_a.hostname ~ " (" ~ prefill_device_a.site.name ~ ")") if prefill_device_a else "" %}

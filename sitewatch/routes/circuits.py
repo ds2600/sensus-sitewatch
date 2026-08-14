@@ -48,8 +48,37 @@ def _form_options():
     }
 
 
+def _circuit_own_site_ids(circuit):
+    """Site ids at this circuit's own two real ends — a waypoint duplicating
+    one of these is meaningless (it's already an endpoint of the route, not
+    a bend in the middle of it). Reads interface_a_id/interface_b_id via an
+    independent Interface query rather than the circuit.interface_a/b
+    relationship, since this also has to work for a circuit still being
+    created (add_circuit calls this before the new Circuit is ever added to
+    the session, when relationship lazy-loading isn't available yet — a
+    plain query keyed on the raw FK id doesn't care either way). A bundle
+    has no interfaces of its own; site_a/site_b there are borrowed from its
+    first member with real endpoints, same as everywhere else on this
+    model — empty/None for a brand new bundle with no members yet, which is
+    exactly correct (nothing to conflict with)."""
+    if circuit.is_bundle:
+        a, b = circuit.site_a, circuit.site_b
+        return {s.id for s in (a, b) if s}
+    ids = set()
+    for iface_id in (circuit.interface_a_id, circuit.interface_b_id):
+        if iface_id:
+            iface = Interface.query.get(iface_id)
+            if iface:
+                ids.add(iface.device.site_id)
+    return ids
+
+
 def _set_waypoints(circuit, form):
     ids = [int(x) for x in form.get("waypoint_site_ids", "").split(",") if x]
+    own_site_ids = _circuit_own_site_ids(circuit)
+    filtered_ids = [site_id for site_id in ids if site_id not in own_site_ids]
+    if len(filtered_ids) != len(ids):
+        flash("A circuit's own A/Z site can't also be one of its waypoints — dropped from the route.")
     if circuit.id is not None:
         # Explicit bulk delete first, not just reassigning circuit.waypoints
         # to a new list — the ORM's delete-orphan cascade doesn't guarantee
@@ -58,7 +87,7 @@ def _set_waypoints(circuit, form):
         # unique constraint when a position is reused (nearly always, since
         # positions are just 0..N-1 every time).
         CircuitWaypoint.query.filter_by(circuit_id=circuit.id).delete()
-    circuit.waypoints = [CircuitWaypoint(site_id=site_id, position=i) for i, site_id in enumerate(ids)]
+    circuit.waypoints = [CircuitWaypoint(site_id=site_id, position=i) for i, site_id in enumerate(filtered_ids)]
 
 
 def _endpoint_picker_data(exclude_circuit_id=None):
@@ -120,6 +149,9 @@ def add_circuit():
     if request.method == "POST":
         f = request.form
         is_bundle = f.get("is_bundle") == "on"
+        if is_bundle and f.get("parent_circuit_id"):
+            flash("A bundle can't itself belong to another bundle.")
+            return redirect(url_for("circuits.add_circuit"))
         circuit = Circuit(
             name=f["name"],
             role_id=int(f["role_id"]),
@@ -344,7 +376,8 @@ def circuit_detail(circuit_id):
     # (Edit's own Parent bundle field already covers that, deliberately).
     attachable_circuits = (
         [{"id": c.id, "label": c.name}
-         for c in Circuit.query.filter_by(parent_circuit_id=None).filter(Circuit.id != circuit.id).all()]
+         for c in Circuit.query.filter_by(parent_circuit_id=None).filter(Circuit.id != circuit.id).all()
+         if not c.is_bundle]  # a bundle can't itself belong to another bundle
         if circuit.is_bundle else []
     )
     return render_template("circuit_detail.html", circuit=circuit, is_muted=is_muted,
@@ -430,8 +463,8 @@ def attach_member(circuit_id):
     bundle = Circuit.query.get_or_404(circuit_id)
     member_id = request.form.get("member_circuit_id", type=int)
     member = Circuit.query.get(member_id) if member_id else None
-    if not member or member.id == bundle.id or member.parent_circuit_id is not None:
-        flash("Pick an existing, unattached circuit.")
+    if not member or member.id == bundle.id or member.parent_circuit_id is not None or member.is_bundle:
+        flash("Pick an existing, unattached, non-bundle circuit.")
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
     member.parent_circuit_id = bundle.id
     db.session.commit()
@@ -455,6 +488,9 @@ def edit_circuit(circuit_id):
         new_parent = int(f["parent_circuit_id"]) if f.get("parent_circuit_id") else None
         if new_parent == circuit.id:
             flash("A circuit can't be its own parent.")
+            return redirect(url_for("circuits.edit_circuit", circuit_id=circuit_id))
+        if new_parent is not None and circuit.is_bundle:
+            flash("A bundle can't itself belong to another bundle.")
             return redirect(url_for("circuits.edit_circuit", circuit_id=circuit_id))
         circuit.parent_circuit_id = new_parent
         circuit.capacity_bps_override = int(f["capacity_override"]) if f.get("capacity_override") else None
