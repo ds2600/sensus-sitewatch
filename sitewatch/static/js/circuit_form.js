@@ -15,12 +15,21 @@ document.addEventListener("DOMContentLoaded", () => {
     options: jsonData("roles-data"),
   });
 
-  searchableSelect({
-    input: document.getElementById("parent_search"),
-    hidden: document.getElementById("parent_circuit_id"),
-    menu: document.getElementById("parent_menu"),
-    options: jsonData("bundles-data"),
-  });
+  // Not present at all when editing an existing bundle — circuit_form.html
+  // omits the whole field there (a bundle can't itself have a parent), so
+  // this must guard like wireEndpoint() does below rather than call
+  // searchableSelect() on a null input: that throws and, since everything
+  // in this file runs in one DOMContentLoaded handler, silently kills every
+  // wiring call after it too — including the waypoint picker further down.
+  const parentSearch = document.getElementById("parent_search");
+  if (parentSearch) {
+    searchableSelect({
+      input: parentSearch,
+      hidden: document.getElementById("parent_circuit_id"),
+      menu: document.getElementById("parent_menu"),
+      options: jsonData("bundles-data"),
+    });
+  }
 
   // --- device -> interface pickers: leaf endpoints (a/b, add mode only)
   // and a bundle's optional LAG interfaces (lag_a/lag_b, add or edit) ---
