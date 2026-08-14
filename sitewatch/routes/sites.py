@@ -3,7 +3,7 @@ from flask_login import login_required
 
 from sitewatch.auth import admin_required
 from sitewatch.extensions import db
-from sitewatch.models import Site, Circuit, Region, SITE_TYPES
+from sitewatch.models import Site, Circuit, Region, SITE_TYPES, CircuitStatusHistory
 from sitewatch.status import compute_site_status, site_degree_breakdown
 from sitewatch.csv_import import parse_csv, CsvImportError
 from sitewatch import audit_log
@@ -297,10 +297,27 @@ def site_detail(site_id):
     ]
     intra_site_circuits = [c for c in root_circuits if c.is_intra_site]
     passthrough_transit = _passthrough_transit(site)
+
+    # CircuitStatusHistory is only ever written for LEAF circuits (see
+    # circuits.py's circuit_detail) — a bundle touching this site needs
+    # its members' ids, not its own, to find any history at all.
+    history_circuit_ids = []
+    for c in root_circuits:
+        if c.is_bundle:
+            history_circuit_ids.extend(child.id for child in c.children)
+        else:
+            history_circuit_ids.append(c.id)
+    circuit_history = (
+        CircuitStatusHistory.query.filter(CircuitStatusHistory.circuit_id.in_(history_circuit_ids))
+        .order_by(CircuitStatusHistory.started_at.desc()).all()
+        if history_circuit_ids else []
+    )
+
     return render_template(
         "site_detail.html", site=site, status=status, parent_status=parent_status,
         minor_site_statuses=minor_site_statuses,
         devices=site.devices, intra_site_circuits=intra_site_circuits,
         degree_breakdown=site_degree_breakdown(site),
         passthrough_transit=passthrough_transit,
+        circuit_history=circuit_history,
     )

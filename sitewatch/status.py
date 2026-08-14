@@ -80,7 +80,23 @@ def compute_site_status(site):
     check here, which would wrongly also cascade 'yellow'). Recursing into
     compute_site_status(site.parent_site) is safe from infinite recursion
     only because routes/sites.py enforces one level of nesting — a parent
-    must itself be a plain Major Site with no parent_site_id of its own."""
+    must itself be a plain Major Site with no parent_site_id of its own.
+
+    Red normally requires a fully-down critical-tier external circuit set
+    (see the ext_crit_status check below) — but a site whose EVERY external
+    circuit is down, critical or auxiliary alike, is red regardless of how
+    those circuits happen to be tagged. This is a safety net, not a second
+    way to reach red through auxiliary traffic alone: a site with a healthy
+    critical circuit and a separate down auxiliary one still only caps at
+    yellow, same as always (the combined rollup below is "degraded", not
+    "down", when anything external is still up). It only fires when a site
+    has gone from some external connectivity to none — the case that
+    matters is a minor site whose sole uplink got tagged auxiliary instead
+    of critical (an easy mistake — "minor site" sounds unimportant) and
+    that link fully fails: the site is unambiguously down, not "degraded",
+    no matter what its one circuit was labeled. Deliberately excludes
+    internal (intra-site) circuits — those still can never push a site to
+    red on their own, same as always."""
     if site.site_type == "passthrough":
         return "passthrough"
     if site.devices and all(not d.reachable for d in site.devices):
@@ -98,8 +114,9 @@ def compute_site_status(site):
         int_crit_status = rollup_degree_status(int_critical)
         ext_aux_status = rollup_degree_status(ext_aux)
         int_aux_status = rollup_degree_status(int_aux)
+        ext_all = ext_critical + ext_aux
 
-        if ext_crit_status == "down":
+        if ext_crit_status == "down" or (ext_all and rollup_degree_status(ext_all) == "down"):
             own_status = "red"
         elif ext_crit_status == "degraded" or int_crit_status != "up":
             own_status = "yellow"

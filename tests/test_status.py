@@ -69,17 +69,31 @@ def test_critical_external_circuit_down_is_red(app):
         assert compute_site_status(site_b) == "red"
 
 
-def test_auxiliary_circuit_down_caps_at_yellow_even_if_its_the_only_circuit(app):
-    """This is the exact footgun the minor-site conversation flagged: an
-    auxiliary-tier circuit going 100% down does NOT push a site to red on
-    its own today — only critical-tier circuits do. Documenting this as
-    current behavior so a future change to that rule shows up here as an
-    intentional diff, not a silent one."""
+def test_auxiliary_circuit_down_is_red_when_its_the_sites_only_external_circuit(app):
+    """The exact footgun the minor-site conversation flagged: a site's
+    sole external connection tagged auxiliary instead of critical (an easy
+    mistake — "minor site" sounds unimportant) must still read red when
+    that link is 100% down, since the site genuinely has zero external
+    connectivity. See compute_site_status()'s ext_all safety net."""
     with app.app_context():
         site_a = make_site(name="A")
         site_b = make_site(name="B")
         aux = make_role(tier="auxiliary")
         link_devices(site_a, site_b, role=aux, current_state="down")
+        assert compute_site_status(site_a) == "red"
+
+
+def test_auxiliary_circuit_down_still_caps_at_yellow_when_critical_stays_up(app):
+    """The safety net only fires when a site has NO external connectivity
+    left at all — a healthy critical circuit alongside a separate down
+    auxiliary one is still just "degraded", not "down", so this must not
+    regress to red via auxiliary traffic alone."""
+    with app.app_context():
+        site_a = make_site(name="A")
+        site_b, site_c = make_site(name="B"), make_site(name="C")
+        critical, aux = make_role(tier="critical"), make_role(tier="auxiliary")
+        link_devices(site_a, site_b, role=critical, current_state="up")
+        link_devices(site_a, site_c, role=aux, current_state="down")
         assert compute_site_status(site_a) == "yellow"
 
 
@@ -142,9 +156,13 @@ def test_minor_site_not_forced_when_parent_is_only_yellow(app):
     != 'green' check as the cascade condition)."""
     with app.app_context():
         major = make_site(name="Major")
-        neighbor = make_site(name="Neighbor")
+        neighbor_a, neighbor_b = make_site(name="Neighbor A"), make_site(name="Neighbor B")
         aux = make_role(tier="auxiliary")
-        link_devices(major, neighbor, role=aux, current_state="down")  # -> major is yellow, not red
+        # One aux circuit up, one down -> partial external degradation
+        # (yellow), NOT a fully-down external set (which would be red
+        # under the safety net — see test_status.py's auxiliary tests).
+        link_devices(major, neighbor_a, role=aux, current_state="up")
+        link_devices(major, neighbor_b, role=aux, current_state="down")
 
         minor = make_site(name="Minor", site_type="minor", parent_site=major)
         other = make_site(name="Other")

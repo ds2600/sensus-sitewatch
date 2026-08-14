@@ -60,9 +60,16 @@ stored, from `compute_site_status()`.
   see `rollup_degree_status()`'s `relevant` filter.
 - Site status splits internal (intra-site device-to-device) vs external
   (inter-site) circuits, and critical vs auxiliary tier (via `CircuitRole`).
-  Only a fully-down **critical external** circuit set can push a site to
-  red. Everything else caps at yellow. Full truth table is in
-  `compute_site_status()` — don't reimplement this logic elsewhere.
+  A fully-down **critical external** circuit set pushes a site to red, and
+  so does a site with **zero external connectivity at all** (every
+  external circuit down, critical and auxiliary combined) regardless of
+  how those circuits are tagged — a safety net for a site whose only
+  uplink got mistagged auxiliary, not a second route to red through
+  auxiliary traffic alone (a healthy critical circuit plus a separate down
+  auxiliary one still just caps at yellow). Internal circuits can never
+  push a site to red on their own, no matter the tier — everything else
+  caps at yellow. Full truth table is in `compute_site_status()` — don't
+  reimplement this logic elsewhere.
 
 ## Conventions
 

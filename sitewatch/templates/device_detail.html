@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import breadcrumb, status_badge %}
+{% from "_macros.html" import breadcrumb, status_badge, circuit_history_table %}
 {% block content %}
 {{ breadcrumb([("Sites", url_for('sites.list_sites')), (device.site.name, url_for('sites.site_detail', site_id=device.site_id)), (device.hostname, none)]) }}
 <div class="d-flex align-items-center gap-2">
@@ -59,4 +59,7 @@
   </tbody>
 </table>
 </div>
+
+<h5 class="mt-4">Down history</h5>
+{{ circuit_history_table(circuit_history, 'device-history-table') }}
 {% endblock %}

@@ -101,3 +101,54 @@
 </div>
 {% endif %}
 {% endmacro %}
+
+{# Shared by circuit_detail.html (a circuit's own down history — or, for a
+   bundle, its members'), site_detail.html (every circuit touching that
+   site), device_detail.html (every circuit on that device), and
+   circuit_incidents.html (everything, uncapped). history is a list of
+   CircuitStatusHistory rows, newest first. show_circuit is False on a
+   leaf circuit's own page (redundant with the page itself) and True
+   everywhere else (a bundle's own page included, so each row is clear
+   about which member it belongs to). table_id must be unique on the page
+   (the datatable JS keys its pagination control off it). The ticket #
+   field posts to circuits.set_incident_ticket inline, same route/behavior
+   in every embedding. #}
+{% macro circuit_history_table(history, table_id, show_circuit=True) %}
+{% if not history %}
+<p class="text-muted">No down history.</p>
+{% else %}
+<div class="datatable" id="{{ table_id }}" data-page-size="25">
+<table class="table table-sm">
+  <thead><tr>
+    {% if show_circuit %}<th data-sort="circuit">Circuit</th>{% endif %}
+    <th data-sort="down_since">Down since</th>
+    <th data-sort="cleared_at" data-sort-attr="data-value">Cleared at</th>
+    <th data-sort="incident">Incident #</th>
+    <th>Ticket #</th>
+  </tr></thead>
+  <tbody>
+    {% for h in history %}
+    <tr>
+      {% if show_circuit %}
+      <td><a class="circuit" href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
+      {% endif %}
+      <td class="down_since">{{ h.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td class="cleared_at" data-value="{{ h.cleared_at.strftime('%Y-%m-%d %H:%M') if h.cleared_at else '' }}">
+        {% if h.cleared_at %}{{ h.cleared_at.strftime('%Y-%m-%d %H:%M') }}
+        {% else %}<span class="badge bg-danger">Ongoing</span>{% endif %}
+      </td>
+      <td class="incident">{{ h.incident_number }}</td>
+      <td>
+        <form method="post" action="{{ url_for('circuits.set_incident_ticket', history_id=h.id) }}" class="d-flex gap-1">
+          <input type="hidden" name="next" value="{{ request.path }}">
+          <input type="text" name="external_ticket" value="{{ h.external_ticket or '' }}" class="form-control form-control-sm" style="max-width:9rem" placeholder="Ticket #">
+          <button class="btn btn-outline-secondary btn-sm">Save</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endmacro %}

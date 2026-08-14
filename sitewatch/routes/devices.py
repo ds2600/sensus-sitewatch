@@ -5,7 +5,7 @@ from flask_login import login_required
 
 from sitewatch.auth import admin_required
 from sitewatch.extensions import db
-from sitewatch.models import Device, Site, Circuit, VENDORS, SNMP_VERSIONS
+from sitewatch.models import Device, Site, Circuit, CircuitStatusHistory, VENDORS, SNMP_VERSIONS
 from sitewatch.discovery import perform_walk
 from sitewatch.poller import poll_device_now
 from sitewatch import job_log, cooldown, audit_log
@@ -205,8 +205,21 @@ def device_detail(device_id):
                 circuits_by_interface_id[c.interface_a_id] = c
             if c.interface_b_id in iface_ids:
                 circuits_by_interface_id[c.interface_b_id] = c
+
+    # circuits_by_interface_id's values are always leaf circuits (a bundle
+    # never has interface_a/b set), so no bundle-member expansion needed
+    # here the way sites.py/circuits.py's history queries need — every id
+    # here already has its own CircuitStatusHistory rows directly.
+    history_circuit_ids = {c.id for c in circuits_by_interface_id.values()}
+    circuit_history = (
+        CircuitStatusHistory.query.filter(CircuitStatusHistory.circuit_id.in_(history_circuit_ids))
+        .order_by(CircuitStatusHistory.started_at.desc()).all()
+        if history_circuit_ids else []
+    )
+
     return render_template("device_detail.html", device=device,
-                            circuits_by_interface_id=circuits_by_interface_id)
+                            circuits_by_interface_id=circuits_by_interface_id,
+                            circuit_history=circuit_history)
 
 
 @devices_bp.route("/<int:device_id>/edit", methods=["GET", "POST"])

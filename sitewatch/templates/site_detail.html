@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import breadcrumb, site_status_badge, circuit_status_badge, status_badge, passthrough_transit_table %}
+{% from "_macros.html" import breadcrumb, site_status_badge, circuit_status_badge, status_badge, passthrough_transit_table, circuit_history_table %}
 {% block content %}
 {{ breadcrumb([("Sites", url_for('sites.list_sites')), (site.name, none)]) }}
 <div class="d-flex align-items-center gap-2">
@@ -109,5 +109,8 @@
 
 <h5 class="mt-4">Circuits passing through</h5>
 {{ passthrough_transit_table(passthrough_transit, 'site-transit-table') }}
+
+<h5 class="mt-4">Down history</h5>
+{{ circuit_history_table(circuit_history, 'site-history-table') }}
 {% endif %}
 {% endblock %}

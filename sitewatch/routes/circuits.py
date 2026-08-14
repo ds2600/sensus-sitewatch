@@ -396,9 +396,16 @@ def import_circuits_confirm():
 def circuit_detail(circuit_id):
     circuit = Circuit.query.get_or_404(circuit_id)
     is_muted = AlertMute.is_muted(circuit_id)
-    open_incident = (CircuitStatusHistory.query
-                      .filter_by(circuit_id=circuit_id, cleared_at=None)
-                      .order_by(CircuitStatusHistory.started_at.desc()).first())
+    # CircuitStatusHistory is only ever written for LEAF circuits — a
+    # bundle's own current_state changes via recompute_bundle_state
+    # directly, never through poller.py's _transition, so a bundle never
+    # gets its own history rows. Show its members' instead.
+    history_circuit_ids = [c.id for c in circuit.children] if circuit.is_bundle else [circuit.id]
+    circuit_history = (
+        CircuitStatusHistory.query.filter(CircuitStatusHistory.circuit_id.in_(history_circuit_ids))
+        .order_by(CircuitStatusHistory.started_at.desc()).all()
+        if history_circuit_ids else []
+    )
     # Only unparented circuits — this is for attaching a standalone circuit
     # someone already built, not for stealing one away from another bundle
     # (Edit's own Parent bundle field already covers that, deliberately).
@@ -409,7 +416,7 @@ def circuit_detail(circuit_id):
         if circuit.is_bundle else []
     )
     return render_template("circuit_detail.html", circuit=circuit, is_muted=is_muted,
-                            open_incident=open_incident, attachable_circuits=attachable_circuits)
+                            circuit_history=circuit_history, attachable_circuits=attachable_circuits)
 
 
 @circuits_bp.route("/<int:circuit_id>/utilization-history")
