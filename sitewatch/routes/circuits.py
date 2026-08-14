@@ -8,6 +8,7 @@ from sitewatch.models import (
     Circuit, CircuitRole, CircuitWaypoint, Interface, Device, Site, AlertMute, Setting, CircuitStatusHistory,
 )
 from sitewatch.poller import poll_device_now
+from sitewatch.integrations.webhook_payload import send_down_alerts
 from sitewatch import job_log, cooldown
 from sitewatch.csv_import import parse_csv, CsvImportError
 from sitewatch.utilization import circuit_utilization_history
@@ -446,11 +447,16 @@ def repoll_circuit(circuit_id):
     job_id = job_log.start_job(f"Repolling {circuit.name}")
 
     def work():
+        # Shared across every device in this loop so a bundle's two LAG
+        # devices (or a leaf's two endpoints) both going down from one
+        # Repoll click send a single grouped webhook, not one apiece.
+        alert_batch = []
         for d in devices:
             if job_log.cancel_requested(job_id):
                 job_log.log_line(job_id, "Stopped by user.")
                 break
-            poll_device_now(Device.query.get(d.id))
+            poll_device_now(Device.query.get(d.id), alert_batch)
+        send_down_alerts(alert_batch)
 
     job_log.run_in_background(job_id, work, current_app._get_current_object())
     return jsonify({"job_id": job_id, "label": f"Repolling {circuit.name}",

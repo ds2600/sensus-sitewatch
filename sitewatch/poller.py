@@ -35,7 +35,7 @@ from sitewatch import telemetry
 from sitewatch.snmp import SnmpError
 from sitewatch.snmp import new_engine as new_snmp_engine
 from sitewatch.status import recompute_bundle_state, rollup_degree_status
-from sitewatch.integrations.webhook_payload import send_down_alert
+from sitewatch.integrations.webhook_payload import send_down_alerts
 from sitewatch import job_log
 
 log = logging.getLogger(__name__)
@@ -70,6 +70,10 @@ def poll_all_devices():
     try:
         started = time.monotonic()
         device_count = 0
+        # Every circuit that goes down anywhere in this sweep lands here,
+        # then one grouped webhook goes out at the very end — never one
+        # per device/circuit. See webhook_payload.py's module docstring.
+        alert_batch = []
         monitored_ids = _monitored_interface_ids()
         devices_by_id = {d.id: d for d in Device.query.all()}
         snapshots = {device_id: _snapshot_device(device, monitored_ids)
@@ -114,7 +118,7 @@ def poll_all_devices():
                 # is actually visible to other requests right away and so SQLite
                 # doesn't hold one write transaction open for the whole sweep
                 # (see the "database is locked" fix — same reasoning applies).
-                _recompute_all_circuit_states()
+                _recompute_all_circuit_states(alert_batch)
                 db.session.commit()
                 device_count += 1
                 job_log.set_progress(job_id, device_count)
@@ -123,6 +127,7 @@ def poll_all_devices():
         Setting.set("last_poll_duration_seconds", f"{duration:.1f}")
         Setting.set("last_poll_finished_at", datetime.utcnow().isoformat())
         db.session.commit()
+        send_down_alerts(alert_batch)
         log.info("Poll cycle finished in %.1fs (%d devices, up to %d concurrent)",
                   duration, device_count, max_workers)
     finally:
@@ -338,7 +343,7 @@ def _lag_target_state(circuit):
     return _interface_pair_target_state([circuit.lag_interface_a, circuit.lag_interface_b])
 
 
-def _apply_debounce(circuit, target_state):
+def _apply_debounce(circuit, target_state, alert_batch):
     threshold = Setting.get_int("down_threshold_count")
 
     # admin_down / unreachable are deterministic config/reachability facts,
@@ -353,17 +358,17 @@ def _apply_debounce(circuit, target_state):
         circuit.consecutive_fail_count += 1
         circuit.consecutive_success_count = 0
         if circuit.current_state == "up" and circuit.consecutive_fail_count >= threshold:
-            _transition(circuit, "down")
+            _transition(circuit, "down", alert_batch)
     else:  # up
         circuit.consecutive_success_count += 1
         circuit.consecutive_fail_count = 0
         if circuit.current_state == "down" and circuit.consecutive_success_count >= threshold:
-            _transition(circuit, "up")
+            _transition(circuit, "up", alert_batch)
         elif circuit.current_state in ("admin_down", "unreachable"):
             circuit.current_state = "up"
 
 
-def _transition(circuit, new_state):
+def _transition(circuit, new_state, alert_batch):
     old_state = circuit.current_state
     circuit.current_state = new_state
     circuit.state_changed_at = datetime.utcnow()
@@ -376,7 +381,11 @@ def _transition(circuit, new_state):
         history.incident_number = f"{prefix}-{history.id:06d}"
         from sitewatch.models import AlertMute
         if not AlertMute.is_muted(circuit.id):
-            send_down_alert(circuit)
+            # Not sent here — appended to the caller's batch so every
+            # circuit that goes down in the same poll cycle/repoll action
+            # ends up in one grouped webhook instead of one apiece. See
+            # webhook_payload.py's module docstring.
+            alert_batch.append(circuit)
     elif old_state == "down" and new_state == "up":
         open_record = (CircuitStatusHistory.query
                        .filter_by(circuit_id=circuit.id, cleared_at=None)
@@ -385,13 +394,13 @@ def _transition(circuit, new_state):
             open_record.cleared_at = datetime.utcnow()
 
 
-def _recompute_all_circuit_states():
+def _recompute_all_circuit_states(alert_batch):
     # Leaf circuits first (bottom-up), then bundles, since bundle state
     # depends on children already being current.
     leaves = [c for c in Circuit.query.all() if not c.is_bundle]
     for circuit in leaves:
         target = _leaf_target_state(circuit)
-        _apply_debounce(circuit, target)
+        _apply_debounce(circuit, target, alert_batch)
 
     bundles = [c for c in Circuit.query.all() if c.is_bundle]
     # lag_state only depends on the bundle's own interfaces (device
@@ -404,17 +413,28 @@ def _recompute_all_circuit_states():
             recompute_bundle_state(bundle, lag_state=lag_states[bundle.id])
 
 
-def poll_device_now(device):
+def poll_device_now(device, alert_batch=None):
     """Manual single-device repoll — the device detail page's "Repoll" button.
     Runs the same telemetry + debounce logic as a scheduled pass, just scoped
     to one device's reachability/interfaces instead of waiting for the next
     cycle. Circuit/bundle states are recomputed across the board afterward
-    since this device's interfaces may affect circuits touching other sites."""
+    since this device's interfaces may affect circuits touching other sites.
+
+    alert_batch: pass a shared list when calling this in a loop over
+    several devices for one logical action (repoll_circuit, repoll-all-
+    unreachable) so everything that goes down across the whole loop sends
+    one grouped webhook instead of one per device — the caller flushes it
+    once after the loop via send_down_alerts(). Left as None for a
+    standalone single-device repoll, which then sends its own grouped
+    alert here covering however many circuits that one device touches."""
     log.info("Repolling %s (%s) — %d known interface(s)...",
               device.hostname, device.mgmt_ip, len(device.interfaces))
+    own_batch = alert_batch if alert_batch is not None else []
     _poll_device(device)
-    _recompute_all_circuit_states()
+    _recompute_all_circuit_states(own_batch)
     db.session.commit()
+    if alert_batch is None:
+        send_down_alerts(own_batch)
     log.info("Repoll of %s complete: %s.", device.hostname, "reachable" if device.reachable else "unreachable")
 
 

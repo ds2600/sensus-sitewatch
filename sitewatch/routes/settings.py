@@ -1,4 +1,5 @@
 import json
+import requests
 from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify, current_app
@@ -8,6 +9,7 @@ from sitewatch.auth import admin_required
 from sitewatch.extensions import db
 from sitewatch.models import Setting, CircuitRole, Circuit, Region, Site, Device, User, USER_ROLES
 from sitewatch.integrations import netbox
+from sitewatch.integrations.webhook_payload import send_down_alerts, send_test_alert
 from sitewatch.backup import export_data, import_data, BackupImportError, SCOPES
 from sitewatch.poller import (
     get_poller_status, pause_poller, resume_poller, poller_enabled_for_process, reschedule_poller,
@@ -53,6 +55,24 @@ def index():
                             poll_stats=poll_stats, poller_status=get_poller_status(),
                             unreachable_count=unreachable_count,
                             users=User.query.order_by(User.username).all(), user_roles=USER_ROLES)
+
+
+@settings_bp.route("/test-alert", methods=["POST"])
+@admin_required
+def test_alert():
+    """The Google Chat webhook field's "Send test alert" button — posts a
+    fixed example message to whatever URL is currently saved, so an admin
+    can check both the message formatting and that the URL itself actually
+    works, before relying on it during a real outage."""
+    if not Setting.get("google_chat_webhook_url"):
+        flash("Set and save a Google Chat webhook URL first.")
+        return redirect(url_for("settings.index"))
+    try:
+        send_test_alert()
+        flash("Test alert sent — check Google Chat.")
+    except requests.RequestException as e:
+        flash(f"Test alert failed: {e}")
+    return redirect(url_for("settings.index"))
 
 
 @settings_bp.route("/activity")
@@ -105,6 +125,11 @@ def repoll_unreachable():
     device_ids = [d.id for d in devices]
 
     def work():
+        # Shared across every device in this sweep — a batch of previously-
+        # unreachable devices all coming back on the network at once tends
+        # to also drop several circuits together (or bring several back),
+        # so this should read as one grouped webhook, not one per device.
+        alert_batch = []
         for i, device_id in enumerate(device_ids, start=1):
             if job_log.cancel_requested(job_id):
                 job_log.log_line(job_id, f"Stopped by user after {i - 1}/{len(device_ids)} device(s).")
@@ -113,10 +138,11 @@ def repoll_unreachable():
             # walked/repolled individually within its own last 60s.
             if cooldown.remaining(device_id) is None:
                 cooldown.start(device_id)
-                poll_device_now(Device.query.get(device_id))
+                poll_device_now(Device.query.get(device_id), alert_batch)
             else:
                 job_log.log_line(job_id, f"Skipping device {device_id} — hit within the last minute elsewhere.")
             job_log.set_progress(job_id, i)
+        send_down_alerts(alert_batch)
 
     job_log.run_in_background(job_id, work, current_app._get_current_object())
     # This button lives on both Settings and the Circuits list — send the
