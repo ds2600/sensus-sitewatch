@@ -1,0 +1,191 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Sensus SiteWatch API",
+    "description": "JSON endpoints consumed by the map, navbar search, and Tail Modal. Session-cookie authenticated (log in via the normal web UI first — this documents the same endpoints the browser already calls, not a separate token-based API).",
+    "version": "1"
+  },
+  "paths": {
+    "/api/map": {
+      "get": {
+        "summary": "Map sites and circuit lines",
+        "description": "Every site (with computed status) and every top-level (non-member) inter-site circuit, for the Leaflet map.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sites": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "integer"},
+                          "name": {"type": "string"},
+                          "lat": {"type": "number"},
+                          "lon": {"type": "number"},
+                          "status": {"type": "string", "enum": ["green", "yellow", "red"]},
+                          "site_type": {"type": "string"}
+                        }
+                      }
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "integer"},
+                          "name": {"type": "string"},
+                          "state": {"type": "string", "enum": ["up", "degraded", "down", "admin_down", "unreachable"]},
+                          "role": {"type": "string"},
+                          "tier": {"type": "string"},
+                          "util_pct": {"type": "integer", "nullable": true},
+                          "site_a": {"type": "object", "properties": {"lat": {"type": "number"}, "lon": {"type": "number"}}},
+                          "site_b": {"type": "object", "properties": {"lat": {"type": "number"}, "lon": {"type": "number"}}},
+                          "waypoints": {"type": "array", "items": {"type": "object", "properties": {"lat": {"type": "number"}, "lon": {"type": "number"}}}}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "summary": "Header poll target: open alerts + poller state",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "alerts": {
+                      "type": "object",
+                      "properties": {
+                        "count": {"type": "integer"},
+                        "circuits": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {"type": "integer"},
+                              "name": {"type": "string"},
+                              "since": {"type": "string", "format": "date-time"}
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "poller": {"type": "object", "description": "Shape of sitewatch.poller.get_poller_status()"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search": {
+      "get": {
+        "summary": "Navbar quick search",
+        "description": "Substring match across sites/devices/circuits/incidents, capped at 5 results per type. Requires at least 2 characters.",
+        "parameters": [
+          {"name": "q", "in": "query", "required": false, "schema": {"type": "string"}, "description": "Search text, minimum 2 characters"}
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sites": {"type": "array", "items": {"$ref": "#/components/schemas/SearchResult"}},
+                    "devices": {"type": "array", "items": {"$ref": "#/components/schemas/SearchResult"}},
+                    "circuits": {"type": "array", "items": {"$ref": "#/components/schemas/SearchResult"}},
+                    "incidents": {"type": "array", "items": {"$ref": "#/components/schemas/SearchResult"}}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "summary": "Recent background job activity",
+        "description": "Poll cycles and manual walk/repoll jobs, most recent first.",
+        "parameters": [
+          {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "default": 30}}
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {"application/json": {"schema": {"type": "object", "properties": {"jobs": {"type": "array", "items": {"type": "object"}}}}}}
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/log": {
+      "get": {
+        "summary": "Tail Modal log poll",
+        "description": "New log lines for a job since a given offset.",
+        "parameters": [
+          {"name": "job_id", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "since", "in": "query", "required": false, "schema": {"type": "integer", "default": 0}, "description": "next_index from the previous response"}
+        ],
+        "responses": {
+          "200": {"description": "OK", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "404": {"description": "Job not found or expired", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/api/jobs/{job_id}/cancel": {
+      "post": {
+        "summary": "Tail Modal Stop button",
+        "parameters": [
+          {"name": "job_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "OK", "content": {"application/json": {"schema": {"type": "object", "properties": {"ok": {"type": "boolean"}}}}}}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "label": {"type": "string"}
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {"type": "string"}
+        }
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session",
+        "description": "Set by logging in through the web UI (/login). \"Try it out\" only works if this page is open in a browser tab that's already logged in."
+      }
+    }
+  },
+  "security": [{"sessionCookie": []}]
+}

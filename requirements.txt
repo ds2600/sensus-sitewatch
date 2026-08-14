@@ -12,3 +12,4 @@ cryptography==42.0.5
 requests==2.31.0
 python-dotenv==1.0.1
 gunicorn==23.0.0  # production WSGI server; see README section 15
+flask-swagger-ui==4.11.1  # API docs UI (/api/docs) — MIT, no paid tier; bundles swagger-ui-dist statically, no CDN/build step

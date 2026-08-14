@@ -10,7 +10,7 @@ load_dotenv()
 # SemVer. Bump on every user-facing release; GitHub Releases tags match
 # this (vX.Y.Z). Surfaced in the UI footer (see inject_app_name below) so
 # anyone looking at a running instance can tell what's actually deployed.
-__version__ = "0.8.4"
+__version__ = "0.8.5"
 
 
 def create_app():
@@ -51,6 +51,21 @@ def create_app():
     app.register_blueprint(settings_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(regions_bp)
+
+    # API docs (Swagger UI) — reads sitewatch/static/openapi.json, which
+    # documents api_bp's endpoints by hand (kept in sync manually, same as
+    # every other hand-synced pair in this codebase — see api.py's _util_pct
+    # comment). Gated behind login like the rest of the app: flask-swagger-ui
+    # vendors its own blueprint, so login is enforced via before_request
+    # rather than a per-route decorator we don't control.
+    from flask_login import login_required
+    from flask_swagger_ui import get_swaggerui_blueprint
+    swagger_ui_bp = get_swaggerui_blueprint(
+        "/api/docs", "/static/openapi.json",
+        config={"app_name": "Sensus SiteWatch API"},
+    )
+    swagger_ui_bp.before_request(login_required(lambda: None))
+    app.register_blueprint(swagger_ui_bp)
 
     @app.context_processor
     def inject_app_name():
