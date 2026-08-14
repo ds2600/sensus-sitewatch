@@ -51,6 +51,30 @@ tr[data-href]:hover {
   background-color: var(--bs-tertiary-bg);
 }
 
+/* Sortable list/table headers (datatable.js, via List.js's .sort class) —
+   arrow shows current sort direction, a faint one hints the column is
+   clickable before it's ever been sorted. */
+.datatable th.sort {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 1.25rem;
+}
+.datatable th.sort::after {
+  content: "\2195";
+  position: absolute;
+  right: 0.4rem;
+  opacity: 0.3;
+}
+.datatable th.sort.asc::after {
+  content: "\2191";
+  opacity: 1;
+}
+.datatable th.sort.desc::after {
+  content: "\2193";
+  opacity: 1;
+}
+
 /* Navbar quick search (search.js) */
 #search-menu {
   min-width: 20rem;

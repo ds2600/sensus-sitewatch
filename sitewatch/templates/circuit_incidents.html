@@ -4,15 +4,25 @@
 {{ breadcrumb([("Circuits", url_for('circuits.list_circuits')), ("Past incidents", none)]) }}
 <h4>Past incidents</h4>
 
+{% if not incidents %}
+<p class="text-muted">No incidents yet.</p>
+{% else %}
+<div class="datatable" id="incidents-table" data-page-size="25">
 <table class="table table-sm">
-  <thead><tr><th>Circuit</th><th>Incident #</th><th>Down since</th><th>Cleared at</th><th>Ticket #</th></tr></thead>
+  <thead><tr>
+    <th data-sort="circuit">Circuit</th>
+    <th data-sort="incident">Incident #</th>
+    <th data-sort="down_since">Down since</th>
+    <th data-sort="cleared_at" data-sort-attr="data-value">Cleared at</th>
+    <th>Ticket #</th>
+  </tr></thead>
   <tbody>
     {% for h in incidents %}
     <tr>
-      <td><a href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
-      <td>{{ h.incident_number }}</td>
-      <td>{{ h.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
-      <td>
+      <td><a class="circuit" href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
+      <td class="incident">{{ h.incident_number }}</td>
+      <td class="down_since">{{ h.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td class="cleared_at" data-value="{{ h.cleared_at.strftime('%Y-%m-%d %H:%M') if h.cleared_at else '' }}">
         {% if h.cleared_at %}{{ h.cleared_at.strftime('%Y-%m-%d %H:%M') }}
         {% else %}<span class="badge bg-danger">Ongoing</span>{% endif %}
       </td>
@@ -24,9 +34,9 @@
         </form>
       </td>
     </tr>
-    {% else %}
-    <tr><td colspan="5" class="text-muted">No incidents yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
+{% endif %}
 {% endblock %}

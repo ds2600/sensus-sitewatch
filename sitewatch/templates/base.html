@@ -107,6 +107,11 @@
   <script src="{{ url_for('static', filename='js/job-modal.js') }}"></script>
   <script src="{{ url_for('static', filename='js/clickable_rows.js') }}"></script>
   <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+  <!-- List.js: MIT, zero dependencies, no build step — see datatable.js for
+       the markup contract every list/table page follows to get search,
+       sort, and pagination for free. -->
+  <script src="https://cdn.jsdelivr.net/npm/list.js@2.3.1/dist/list.min.js"></script>
+  <script src="{{ url_for('static', filename='js/datatable.js') }}"></script>
   {% endif %}
   {% block scripts %}{% endblock %}
 </body>

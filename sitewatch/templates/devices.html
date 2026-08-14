@@ -10,18 +10,25 @@
 {% if not devices %}
 <p class="text-body-secondary">No devices yet.{% if current_user.is_admin %} <a href="{{ url_for('devices.add_device') }}">Add the first one</a>.{% endif %}</p>
 {% else %}
+<div class="datatable" id="devices-table" data-page-size="25">
 <table class="table">
-  <thead><tr><th>Hostname</th><th>Site</th><th>Vendor</th><th>Reachable</th><th></th></tr></thead>
+  <thead><tr>
+    <th data-sort="hostname">Hostname</th>
+    <th data-sort="site">Site</th>
+    <th data-sort="vendor">Vendor</th>
+    <th data-sort="reachable" data-sort-attr="data-value">Reachable</th>
+    <th></th>
+  </tr></thead>
   <tbody>
     {% for d in devices %}
     <tr data-href="{{ url_for('devices.device_detail', device_id=d.id) }}">
       <td>
-        <a href="{{ url_for('devices.device_detail', device_id=d.id) }}">{{ d.hostname }}</a>
+        <a class="hostname" href="{{ url_for('devices.device_detail', device_id=d.id) }}">{{ d.hostname }}</a>
         <a href="{{ url_for('devices.edit_device', device_id=d.id) }}" class="text-body-secondary small ms-1">edit</a>
       </td>
-      <td>{{ d.site.name }}</td>
-      <td>{{ d.vendor }}</td>
-      <td>{{ status_badge('up' if d.reachable else 'unreachable') }}</td>
+      <td class="site">{{ d.site.name }}</td>
+      <td class="vendor">{{ d.vendor }}</td>
+      <td class="reachable" data-value="{{ 'up' if d.reachable else 'unreachable' }}">{{ status_badge('up' if d.reachable else 'unreachable') }}</td>
       <td>
         <button type="button" class="btn btn-outline-primary btn-sm" data-job-url="{{ url_for('devices.repoll_device', device_id=d.id) }}"
                 data-job-label="Repolling {{ d.hostname }}">Repoll</button>
@@ -30,5 +37,6 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 {% endblock %}

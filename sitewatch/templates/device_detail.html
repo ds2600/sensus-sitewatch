@@ -31,12 +31,22 @@
 <p class="text-body-secondary small">
   Circuit-linked interfaces only. See <a href="{{ url_for('circuits.list_circuits') }}">Circuits</a> for utilization.
 </p>
+<div class="datatable" id="interfaces-table" data-page-size="25">
 <table class="table table-sm">
-  <thead><tr><th>Index</th><th>Descr</th><th>Alias</th><th>Speed</th><th>Oper</th><th>Admin</th><th>Circuit</th></tr></thead>
+  <thead><tr>
+    <th data-sort="index">Index</th>
+    <th data-sort="descr">Descr</th>
+    <th data-sort="alias">Alias</th>
+    <th data-sort="speed" data-sort-attr="data-value">Speed</th>
+    <th data-sort="oper">Oper</th>
+    <th data-sort="admin">Admin</th>
+    <th>Circuit</th>
+  </tr></thead>
   <tbody>
     {% for i in device.interfaces %}
-    <tr><td>{{ i.if_index }}</td><td>{{ i.if_descr }}</td><td>{{ i.if_alias }}</td>
-        <td>{{ i.if_speed_bps | bps }}</td><td>{{ i.oper_status }}</td><td>{{ i.admin_status }}</td>
+    <tr><td class="index">{{ i.if_index }}</td><td class="descr">{{ i.if_descr }}</td><td class="alias">{{ i.if_alias }}</td>
+        <td class="speed" data-value="{{ i.if_speed_bps or 0 }}">{{ i.if_speed_bps | bps }}</td>
+        <td class="oper">{{ i.oper_status }}</td><td class="admin">{{ i.admin_status }}</td>
         <td>
           {% if i.id in circuits_by_interface_id %}
           <a href="{{ url_for('circuits.circuit_detail', circuit_id=circuits_by_interface_id[i.id].id) }}">{{ circuits_by_interface_id[i.id].name }}</a>
@@ -48,4 +58,5 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

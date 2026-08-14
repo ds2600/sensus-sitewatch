@@ -12,20 +12,30 @@
 {% if not circuits %}
 <p class="text-body-secondary">No circuits yet.{% if current_user.is_admin %} <a href="{{ url_for('circuits.add_circuit') }}">Add the first one</a>.{% endif %}</p>
 {% else %}
+<div class="datatable" id="circuits-table" data-page-size="25">
 <table class="table">
-  <thead><tr><th>Name</th><th>Role</th><th>Type</th><th>State</th><th>Capacity</th><th>Traffic</th><th>Util</th><th></th></tr></thead>
+  <thead><tr>
+    <th data-sort="name">Name</th>
+    <th data-sort="role">Role</th>
+    <th data-sort="type">Type</th>
+    <th data-sort="state" data-sort-attr="data-value">State</th>
+    <th data-sort="capacity" data-sort-attr="data-value">Capacity</th>
+    <th>Traffic</th>
+    <th>Util</th>
+    <th></th>
+  </tr></thead>
   <tbody>
     {% for c in circuits %}
     {% set capacity = c.effective_capacity_bps %}
     <tr data-href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">
       <td>
-        <a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a>
+        <a class="name" href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a>
         {% if current_user.is_admin %}<a href="{{ url_for('circuits.edit_circuit', circuit_id=c.id) }}" class="text-body-secondary small ms-1">edit</a>{% endif %}
       </td>
-      <td>{{ c.role.name }} ({{ c.role.tier }})</td>
-      <td>{{ 'bundle' if c.is_bundle else 'point-to-point' }}</td>
-      <td>{{ circuit_status_badge(c.current_state) }}</td>
-      <td>{{ capacity | bps }}</td>
+      <td class="role">{{ c.role.name }} ({{ c.role.tier }})</td>
+      <td class="type">{{ 'bundle' if c.is_bundle else 'point-to-point' }}</td>
+      <td class="state" data-value="{{ c.current_state }}">{{ circuit_status_badge(c.current_state) }}</td>
+      <td class="capacity" data-value="{{ capacity or 0 }}">{{ capacity | bps }}</td>
       <td>
         <div class="small text-nowrap">{{ c.flow_out_label }}: {{ c.current_out_bps | bps }}</div>
         <div class="small text-nowrap">{{ c.flow_in_label }}: {{ c.current_in_bps | bps }}</div>
@@ -49,5 +59,6 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 {% endblock %}
