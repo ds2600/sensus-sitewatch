@@ -7,7 +7,7 @@
   <a class="btn btn-outline-primary" href="{{ url_for('circuits.import_circuits') }}">Import CSV</a>
   {% endif %}
   <a class="btn btn-outline-secondary" href="{{ url_for('circuits.list_incidents') }}">Past incidents</a>
-  {{ repoll_unreachable_button(unreachable_count) }}
+  {{ repoll_unreachable_button(unreachable_count, current_user.is_admin) }}
 </div>
 {% if not circuits %}
 <p class="text-body-secondary">No circuits yet.{% if current_user.is_admin %} <a href="{{ url_for('circuits.add_circuit') }}">Add the first one</a>.{% endif %}</p>

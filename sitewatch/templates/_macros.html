@@ -25,8 +25,8 @@
 {# Shown on Settings and the Circuits list — same button, same route,
    different "next" so the Tail Modal's Close button returns you to
    whichever page you triggered it from. Hidden entirely at 0. #}
-{% macro repoll_unreachable_button(unreachable_count) %}
-{% if unreachable_count and current_user.is_admin %}
+{% macro repoll_unreachable_button(unreachable_count, is_admin) %}
+{% if unreachable_count and is_admin %}
 <button type="button" class="btn btn-outline-warning btn-sm"
         data-job-url="{{ url_for('settings.repoll_unreachable', next=request.path) }}"
         data-job-label="Repolling {{ unreachable_count }} unreachable device(s)"
