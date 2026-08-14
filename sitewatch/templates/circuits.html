@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import util_pct, repoll_unreachable_button %}
+{% from "_macros.html" import util_pct, repoll_unreachable_button, circuit_status_badge %}
 {% block content %}
 <div class="d-flex gap-2 mb-3">
   {% if current_user.is_admin %}
@@ -24,7 +24,7 @@
       </td>
       <td>{{ c.role.name }} ({{ c.role.tier }})</td>
       <td>{{ 'bundle' if c.is_bundle else 'point-to-point' }}</td>
-      <td><span class="badge bg-secondary">{{ c.current_state }}</span></td>
+      <td>{{ circuit_status_badge(c.current_state) }}</td>
       <td>{{ capacity | bps }}</td>
       <td>
         <div class="small text-nowrap">{{ c.flow_out_label }}: {{ c.current_out_bps | bps }}</div>

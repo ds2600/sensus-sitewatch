@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import site_status_badge %}
 {% block content %}
 <div class="d-flex align-items-center gap-2 mb-3">
   {% if current_user.is_admin %}
@@ -36,7 +37,7 @@
         {% endif %}
       </td>
       <td>{{ s.region.name if s.region else '—' }}</td>
-      <td><span class="badge bg-{{ 'success' if statuses[s.id]=='green' else ('warning' if statuses[s.id]=='yellow' else ('primary' if statuses[s.id]=='blue' else ('dark' if statuses[s.id]=='passthrough' else 'danger'))) }}">{{ statuses[s.id] }}</span></td>
+      <td>{{ site_status_badge(statuses[s.id]) }}</td>
       <td>{{ s.source }}{% if s.out_of_sync %} <span class="badge bg-secondary">out of sync</span>{% endif %}</td>
     </tr>
     {% endfor %}

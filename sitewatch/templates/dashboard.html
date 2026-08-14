@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import circuit_status_badge %}
 {% block content %}
 <div class="d-flex align-items-center gap-2 mb-2">
   <label class="form-label mb-0" for="region_select">Map view</label>
@@ -13,19 +14,23 @@
 </div>
 <div id="map" class="mb-4 rounded border"></div>
 
-<h5>Currently down</h5>
+<div class="d-flex align-items-center gap-2 mt-2">
+  <h5 class="mb-0">Currently down</h5>
+  <span class="text-body-secondary small">({{ down_now|length }})</span>
+</div>
 <table class="table table-sm">
-  <thead><tr><th>Circuit</th><th>Down since</th><th>Incident #</th><th>Ticket #</th><th></th></tr></thead>
+  <thead><tr><th>State</th><th>Circuit</th><th>Down since</th><th>Incident #</th><th>Ticket #</th><th></th></tr></thead>
   <tbody>
     {% for h in down_now %}
     <tr>
+      <td>{{ circuit_status_badge(h.circuit.current_state) }}</td>
       <td><a href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
       <td>{{ h.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
       <td>{{ h.incident_number }}</td>
       <td>
         <form method="post" action="{{ url_for('circuits.set_incident_ticket', history_id=h.id) }}" class="d-flex gap-1">
           <input type="hidden" name="next" value="{{ request.path }}">
-          <input type="text" name="external_ticket" value="{{ h.external_ticket or '' }}" class="form-control form-control-sm" style="max-width:9rem" placeholder="NOC ticket #">
+          <input type="text" name="external_ticket" value="{{ h.external_ticket or '' }}" class="form-control form-control-sm" style="max-width:9rem" placeholder="Ticket #">
           <button class="btn btn-outline-secondary btn-sm">Save</button>
         </form>
       </td>
@@ -39,37 +44,66 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="text-muted">Nothing down.</td></tr>
+    <tr><td colspan="6" class="text-muted">Nothing down.</td></tr>
     {% endfor %}
   </tbody>
 </table>
 
-<h5>Recently cleared</h5>
-<table class="table table-sm">
-  <thead><tr><th>Circuit</th><th>Cleared at</th><th>Incident #</th><th>Ticket #</th></tr></thead>
-  <tbody>
-    {% for h in recently_cleared %}
-    <tr>
-      <td>{{ h.circuit.name }}</td>
-      <td>{{ h.cleared_at.strftime('%Y-%m-%d %H:%M') }}</td>
-      <td>{{ h.incident_number }}</td>
-      <td>
-        <form method="post" action="{{ url_for('circuits.set_incident_ticket', history_id=h.id) }}" class="d-flex gap-1">
-          <input type="hidden" name="next" value="{{ request.path }}">
-          <input type="text" name="external_ticket" value="{{ h.external_ticket or '' }}" class="form-control form-control-sm" style="max-width:9rem" placeholder="NOC ticket #">
-          <button class="btn btn-outline-secondary btn-sm">Save</button>
-        </form>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="4" class="text-muted">Nothing recently cleared.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="d-flex align-items-center gap-2 mt-4">
+  <h5 class="mb-0">Recently cleared</h5>
+  <span class="text-body-secondary small">({{ recently_cleared|length }})</span>
+  <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse"
+          data-bs-target="#recently-cleared-body" aria-expanded="{{ 'false' if cleared_collapsed else 'true' }}"
+          aria-controls="recently-cleared-body" id="recently-cleared-toggle">
+    {{ 'Show' if cleared_collapsed else 'Hide' }}
+  </button>
+</div>
+<div class="collapse {{ '' if cleared_collapsed else 'show' }}" id="recently-cleared-body">
+  <table class="table table-sm">
+    <thead><tr><th>State</th><th>Circuit</th><th>Cleared at</th><th>Incident #</th><th>Ticket #</th></tr></thead>
+    <tbody>
+      {% for h in recently_cleared %}
+      <tr>
+        <td>{{ circuit_status_badge(h.circuit.current_state) }}</td>
+        <td><a href="{{ url_for('circuits.circuit_detail', circuit_id=h.circuit_id) }}">{{ h.circuit.name }}</a></td>
+        <td>{{ h.cleared_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{{ h.incident_number }}</td>
+        <td>
+          <form method="post" action="{{ url_for('circuits.set_incident_ticket', history_id=h.id) }}" class="d-flex gap-1">
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <input type="text" name="external_ticket" value="{{ h.external_ticket or '' }}" class="form-control form-control-sm" style="max-width:9rem" placeholder="Ticket #">
+            <button class="btn btn-outline-secondary btn-sm">Save</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="text-muted">Nothing recently cleared.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/auto_refresh.js') }}"></script>
+<script>
+  // Remembers the Recently cleared section's collapsed state across page
+  // loads via a cookie (not localStorage) — same mechanism auto-refresh
+  // uses (see auto_refresh.js), since dashboard.py reads this cookie
+  // server-side to render the correct initial state and avoid a flash of
+  // the wrong one before JS runs.
+  (() => {
+    const COOKIE = "sitewatch_cleared_collapsed";
+    const body = document.getElementById("recently-cleared-body");
+    const toggleBtn = document.getElementById("recently-cleared-toggle");
+    if (!body || !toggleBtn) return;
+    function setCookie(value) {
+      document.cookie = `${COOKIE}=${value}; path=/; max-age=${60 * 60 * 24 * 365}`;
+    }
+    body.addEventListener("shown.bs.collapse", () => { setCookie("0"); toggleBtn.textContent = "Hide"; });
+    body.addEventListener("hidden.bs.collapse", () => { setCookie("1"); toggleBtn.textContent = "Show"; });
+  })();
+</script>
 {% endblock %}

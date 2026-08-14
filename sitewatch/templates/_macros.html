@@ -35,3 +35,31 @@
 </button>
 {% endif %}
 {% endmacro %}
+
+{# One canonical color+label pairing for every status badge in the app —
+   green=up, yellow=degraded, gray=disabled/not monitored, red=down,
+   blue=unreachable. The badge text is always one of those five words,
+   never a color name (a site's own computed status is "green"/"red"/etc,
+   which reads as nonsense as label text — translate it through
+   site_status_badge() below rather than printing it directly). #}
+{% macro status_badge(word) %}
+{% set cls = {'up': 'success', 'degraded': 'warning', 'down': 'danger',
+              'unreachable': 'primary', 'disabled': 'secondary', 'not monitored': 'secondary'}[word] %}
+<span class="badge bg-{{ cls }}">{{ word }}</span>
+{% endmacro %}
+
+{# Circuit.current_state is already the right word for four of its five
+   values (up/degraded/down/unreachable) — only admin_down needs
+   translating to the shared "disabled" vocabulary. #}
+{% macro circuit_status_badge(state) %}
+{{ status_badge('disabled' if state == 'admin_down' else state) }}
+{% endmacro %}
+
+{# compute_site_status() returns a color name, not a status word — translate
+   before handing off to status_badge(). Passthrough sites aren't monitored
+   at all, so they get the same gray "not monitored" a disabled circuit gets. #}
+{% macro site_status_badge(status) %}
+{% set words = {'green': 'up', 'yellow': 'degraded', 'red': 'down',
+                'blue': 'unreachable', 'passthrough': 'not monitored'} %}
+{{ status_badge(words.get(status, status)) }}
+{% endmacro %}

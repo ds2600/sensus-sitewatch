@@ -19,7 +19,7 @@
       <td>
         <form method="post" action="{{ url_for('circuits.set_incident_ticket', history_id=h.id) }}" class="d-flex gap-1">
           <input type="hidden" name="next" value="{{ request.path }}">
-          <input type="text" name="external_ticket" value="{{ h.external_ticket or '' }}" class="form-control form-control-sm" style="max-width:9rem" placeholder="NOC ticket #">
+          <input type="text" name="external_ticket" value="{{ h.external_ticket or '' }}" class="form-control form-control-sm" style="max-width:9rem" placeholder="Ticket #">
           <button class="btn btn-outline-secondary btn-sm">Save</button>
         </form>
       </td>

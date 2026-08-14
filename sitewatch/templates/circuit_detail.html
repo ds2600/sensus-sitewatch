@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import util_pct, breadcrumb %}
+{% from "_macros.html" import util_pct, breadcrumb, circuit_status_badge %}
 {% block content %}
 {% set crumbs = [("Circuits", url_for('circuits.list_circuits'))] %}
 {% if circuit.parent %}
@@ -8,7 +8,7 @@
 {{ breadcrumb(crumbs + [(circuit.name, none)]) }}
 <div class="d-flex align-items-center gap-2">
   <h4 class="mb-0">{{ circuit.name }}</h4>
-  <span class="badge bg-secondary">{{ circuit.current_state }}</span>
+  {{ circuit_status_badge(circuit.current_state) }}
   {% if current_user.is_admin %}
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('circuits.edit_circuit', circuit_id=circuit.id) }}">Edit</a>
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('circuits.add_circuit', duplicate_id=circuit.id) }}">Duplicate</a>
@@ -83,7 +83,7 @@
     {% set member_capacity = c.effective_capacity_bps %}
     <tr>
       <td><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a></td>
-      <td><span class="badge bg-secondary">{{ c.current_state }}</span></td>
+      <td>{{ circuit_status_badge(c.current_state) }}</td>
       <td>{{ member_capacity | bps }}</td>
       <td>
         <div class="small text-nowrap">{{ c.flow_out_label }}: {{ c.current_out_bps | bps }}</div>
@@ -107,7 +107,7 @@
 <p class="mb-1">{{ open_incident.incident_number }} — down since {{ open_incident.started_at.strftime('%Y-%m-%d %H:%M') }}</p>
 <form method="post" action="{{ url_for('circuits.set_incident_ticket', history_id=open_incident.id) }}" class="d-flex gap-2 col-md-6 mb-4">
   <input type="hidden" name="next" value="{{ request.path }}">
-  <input type="text" name="external_ticket" value="{{ open_incident.external_ticket or '' }}" class="form-control form-control-sm" placeholder="NOC ticket #">
+  <input type="text" name="external_ticket" value="{{ open_incident.external_ticket or '' }}" class="form-control form-control-sm" placeholder="Ticket #">
   <button class="btn btn-outline-secondary btn-sm text-nowrap">Save ticket #</button>
 </form>
 {% endif %}

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "_macros.html" import breadcrumb %}
+{% from "_macros.html" import breadcrumb, site_status_badge, circuit_status_badge, status_badge %}
 {% block content %}
 {{ breadcrumb([("Sites", url_for('sites.list_sites')), (site.name, none)]) }}
 <div class="d-flex align-items-center gap-2">
   <h4 class="mb-0">{{ site.name }}</h4>
-  <span class="badge bg-{{ 'success' if status=='green' else ('warning' if status=='yellow' else ('primary' if status=='blue' else ('dark' if status=='passthrough' else 'danger'))) }}">{{ status }}</span>
+  {{ site_status_badge(status) }}
   {% if current_user.is_admin %}
   <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('sites.edit_site', site_id=site.id) }}">Edit</a>
   <form method="post" action="{{ url_for('sites.delete_site', site_id=site.id) }}" class="d-inline"
@@ -33,7 +33,7 @@
   {% set m_status = minor_site_statuses[m.id] %}
   <li class="list-group-item d-flex align-items-center gap-2">
     <a href="{{ url_for('sites.site_detail', site_id=m.id) }}">{{ m.name }}</a>
-    <span class="badge bg-{{ 'success' if m_status=='green' else ('warning' if m_status=='yellow' else ('primary' if m_status=='blue' else 'danger')) }}">{{ m_status }}</span>
+    {{ site_status_badge(m_status) }}
   </li>
   {% endfor %}
 </ul>
@@ -57,7 +57,7 @@
   <tbody>
     {% for c in intra_site_circuits %}
     <tr><td><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a></td>
-        <td><span class="badge bg-secondary">{{ c.current_state }}</span></td></tr>
+        <td>{{ circuit_status_badge(c.current_state) }}</td></tr>
     {% else %}<tr><td class="text-muted">None.</td></tr>{% endfor %}
   </tbody>
 </table>
@@ -66,14 +66,14 @@
 {% for degree in degree_breakdown %}
 <div class="d-flex align-items-center gap-2 mt-3 mb-1">
   <a href="{{ url_for('sites.site_detail', site_id=degree.site.id) }}">{{ degree.site.name }}</a>
-  <span class="badge bg-secondary">{{ degree.state }}</span>
+  {{ status_badge(degree.state) }}
 </div>
 <table class="table table-sm mb-0">
   <tbody>
     {% for c in degree.circuits %}
     <tr><td><a href="{{ url_for('circuits.circuit_detail', circuit_id=c.id) }}">{{ c.name }}</a></td>
         <td>{{ c.role.name }}</td>
-        <td><span class="badge bg-secondary">{{ c.current_state }}</span></td></tr>
+        <td>{{ circuit_status_badge(c.current_state) }}</td></tr>
     {% endfor %}
   </tbody>
 </table>
