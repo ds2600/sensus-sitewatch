@@ -30,6 +30,25 @@ def list_sites():
                             regions=Region.query.order_by(Region.name).all(), selected_region_id=region_id)
 
 
+def _resolve_minor_parent(site_type):
+    """A minor site's parent_site_id must be present and point at a plain
+    Major Site (site_type == 'site') — never another minor site or a
+    passthrough. This single check is what keeps minor-site nesting to one
+    level, which status.py's compute_site_status() recursion relies on to
+    never go more than one hop deep. Returns (parent_id_or_None, error).
+    Non-minor site types always resolve to (None, None), dropping any
+    stale parent_site_id if a site is edited away from "minor"."""
+    if site_type != "minor":
+        return None, None
+    parent_id = request.form.get("parent_site_id", type=int)
+    parent = Site.query.get(parent_id) if parent_id else None
+    if parent is None:
+        return None, "Minor sites need a parent Major Site."
+    if parent.site_type != "site":
+        return None, "A minor site's parent must be a Major Site, not a minor site or passthrough."
+    return parent_id, None
+
+
 @sites_bp.route("/add", methods=["GET", "POST"])
 @admin_required
 def add_site():
@@ -37,24 +56,31 @@ def add_site():
         site_type = request.form.get("site_type", "site")
         if site_type not in SITE_TYPES:
             site_type = "site"
+        parent_site_id, error = _resolve_minor_parent(site_type)
+        if error:
+            flash(error)
+            return redirect(url_for("sites.add_site"))
         site = Site(
             name=request.form["name"],
             lat=float(request.form["lat"]),
             lon=float(request.form["lon"]),
             site_type=site_type,
+            parent_site_id=parent_site_id,
             region_id=request.form.get("region_id", type=int) or None,
             source="manual",
         )
         db.session.add(site)
         db.session.commit()
         return redirect(url_for("sites.list_sites"))
-    return render_template("site_form.html", site=None, regions=Region.query.order_by(Region.name).all())
+    return render_template("site_form.html", site=None, regions=Region.query.order_by(Region.name).all(),
+                            major_sites=Site.query.filter_by(site_type="site").order_by(Site.name).all())
 
 
 @sites_bp.route("/import")
 @admin_required
 def import_sites():
-    return render_template("site_import.html", site_types=SITE_TYPES)
+    # "minor" excluded — see import_sites_preview's comment.
+    return render_template("site_import.html", site_types=("site", "passthrough"))
 
 
 @sites_bp.route("/import/template")
@@ -108,9 +134,11 @@ def import_sites_preview():
         except ValueError:
             errors.append("Long must be a number.")
 
+        # "minor" excluded here — a minor site needs a parent Major Site,
+        # which a flat CSV row has no way to express yet (see backlog).
         site_type = (row["type"] or "site").strip().lower()
-        if site_type not in SITE_TYPES:
-            errors.append(f"Type must be one of: {', '.join(SITE_TYPES)} (blank defaults to site).")
+        if site_type not in ("site", "passthrough"):
+            errors.append("Type must be one of: site, passthrough (blank defaults to site).")
 
         warning = None
         key = name.strip().lower()
@@ -145,7 +173,7 @@ def import_sites_confirm():
     for name, lat, lon, site_type in zip(names, lats, lons, types):
         db.session.add(Site(
             name=name, lat=float(lat), lon=float(lon),
-            site_type=site_type if site_type in SITE_TYPES else "site",
+            site_type=site_type if site_type in ("site", "passthrough") else "site",
             source="manual",
         ))
     db.session.commit()
@@ -164,14 +192,21 @@ def edit_site(site_id):
         if site_type == "passthrough" and site.devices:
             flash("Has devices assigned — remove or reassign them first.")
             return redirect(url_for("sites.edit_site", site_id=site_id))
+        parent_site_id, error = _resolve_minor_parent(site_type)
+        if error:
+            flash(error)
+            return redirect(url_for("sites.edit_site", site_id=site_id))
         site.name = request.form["name"]
         site.lat = float(request.form["lat"])
         site.lon = float(request.form["lon"])
         site.site_type = site_type
+        site.parent_site_id = parent_site_id
         site.region_id = request.form.get("region_id", type=int) or None
         db.session.commit()
         return redirect(url_for("sites.site_detail", site_id=site.id))
-    return render_template("site_form.html", site=site, regions=Region.query.order_by(Region.name).all())
+    return render_template("site_form.html", site=site, regions=Region.query.order_by(Region.name).all(),
+                            major_sites=Site.query.filter(Site.site_type == "site", Site.id != site.id)
+                            .order_by(Site.name).all())
 
 
 @sites_bp.route("/<int:site_id>/delete", methods=["POST"])
@@ -180,6 +215,9 @@ def delete_site(site_id):
     site = Site.query.get_or_404(site_id)
     if site.devices:
         flash("Has devices assigned — remove or reassign them first.")
+        return redirect(url_for("sites.site_detail", site_id=site_id))
+    if site.minor_sites:
+        flash("Has minor sites assigned — remove or reassign them first.")
         return redirect(url_for("sites.site_detail", site_id=site_id))
     db.session.delete(site)
     db.session.commit()
@@ -191,6 +229,11 @@ def delete_site(site_id):
 def site_detail(site_id):
     site = Site.query.get_or_404(site_id)
     status = compute_site_status(site)
+    # Only fetched to let the template explain *why* a minor site is red
+    # when its own circuits wouldn't otherwise say so (see status.py's
+    # parent-cascade rule) — not used for anything else here.
+    parent_status = compute_site_status(site.parent_site) if site.parent_site else None
+    minor_site_statuses = {m.id: compute_site_status(m) for m in site.minor_sites}
 
     root_circuits = [
         c for c in Circuit.query.filter_by(parent_circuit_id=None).all()
@@ -198,7 +241,8 @@ def site_detail(site_id):
     ]
     intra_site_circuits = [c for c in root_circuits if c.is_intra_site]
     return render_template(
-        "site_detail.html", site=site, status=status,
+        "site_detail.html", site=site, status=status, parent_status=parent_status,
+        minor_site_statuses=minor_site_statuses,
         devices=site.devices, intra_site_circuits=intra_site_circuits,
         degree_breakdown=site_degree_breakdown(site),
     )

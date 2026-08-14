@@ -159,7 +159,17 @@ async function loadMap() {
     }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a> (passthrough)`).addTo(map);
   });
 
-  data.sites.filter((s) => s.site_type !== "passthrough").forEach((s) => {
+  // Minor sites are fully monitored (not muted like passthrough) but drawn
+  // smaller than a Major Site's marker to read as subordinate at a glance —
+  // still full-opacity/status-colored and bringToFront like a major site.
+  data.sites.filter((s) => s.site_type === "minor").forEach((s) => {
+    L.circleMarker([s.lat, s.lon], {
+      radius: 8, color: STATUS_COLOR[s.status], fillColor: STATUS_COLOR[s.status],
+      fillOpacity: 0.9,
+    }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a> (minor)`).addTo(map).bringToFront();
+  });
+
+  data.sites.filter((s) => s.site_type === "site").forEach((s) => {
     L.circleMarker([s.lat, s.lon], {
       radius: 10, color: STATUS_COLOR[s.status], fillColor: STATUS_COLOR[s.status],
       fillOpacity: 0.9,

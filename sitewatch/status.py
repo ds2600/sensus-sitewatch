@@ -70,32 +70,48 @@ def compute_site_status(site):
 
     Passthrough sites (site_type == 'passthrough') carry no equipment by
     design, so there's nothing to poll or roll up — they're a map waypoint,
-    not a monitored location."""
+    not a monitored location.
+
+    Minor sites (site_type == 'minor') compute their own status exactly like
+    any other site below, but a fully-down or unreachable parent Major Site
+    forces this site to red too, regardless of its own circuits — a minor
+    site genuinely can't be up if its uplink site is dark. A merely-degraded
+    parent does NOT cascade — only 'red'/'blue' do (never a plain != 'green'
+    check here, which would wrongly also cascade 'yellow'). Recursing into
+    compute_site_status(site.parent_site) is safe from infinite recursion
+    only because routes/sites.py enforces one level of nesting — a parent
+    must itself be a plain Major Site with no parent_site_id of its own."""
     if site.site_type == "passthrough":
         return "passthrough"
     if site.devices and all(not d.reachable for d in site.devices):
-        return "blue"
+        own_status = "blue"
+    else:
+        root_circuits = [c for c in Circuit.query.filter_by(parent_circuit_id=None).all()
+                          if _touches_site(c, site.id)]
 
-    root_circuits = [c for c in Circuit.query.filter_by(parent_circuit_id=None).all()
-                      if _touches_site(c, site.id)]
+        ext_critical, ext_aux, int_critical, int_aux = [], [], [], []
+        for c in root_circuits:
+            bucket_list = _pick_bucket(c, site.id, ext_critical, ext_aux, int_critical, int_aux)
+            bucket_list.append(c.current_state)
 
-    ext_critical, ext_aux, int_critical, int_aux = [], [], [], []
-    for c in root_circuits:
-        bucket_list = _pick_bucket(c, site.id, ext_critical, ext_aux, int_critical, int_aux)
-        bucket_list.append(c.current_state)
+        ext_crit_status = rollup_degree_status(ext_critical)
+        int_crit_status = rollup_degree_status(int_critical)
+        ext_aux_status = rollup_degree_status(ext_aux)
+        int_aux_status = rollup_degree_status(int_aux)
 
-    ext_crit_status = rollup_degree_status(ext_critical)
-    int_crit_status = rollup_degree_status(int_critical)
-    ext_aux_status = rollup_degree_status(ext_aux)
-    int_aux_status = rollup_degree_status(int_aux)
+        if ext_crit_status == "down":
+            own_status = "red"
+        elif ext_crit_status == "degraded" or int_crit_status != "up":
+            own_status = "yellow"
+        elif ext_aux_status != "up" or int_aux_status != "up":
+            own_status = "yellow"
+        else:
+            own_status = "green"
 
-    if ext_crit_status == "down":
-        return "red"
-    if ext_crit_status == "degraded" or int_crit_status != "up":
-        return "yellow"
-    if ext_aux_status != "up" or int_aux_status != "up":
-        return "yellow"
-    return "green"
+    if site.site_type == "minor" and site.parent_site is not None:
+        if compute_site_status(site.parent_site) in ("red", "blue"):
+            return "red"
+    return own_status
 
 
 def site_degree_breakdown(site):

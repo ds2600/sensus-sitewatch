@@ -15,9 +15,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const res = await fetch("/api/map");
   const data = await res.json();
+  // Same radius tiers as the main map (map.js) — passthrough smallest,
+  // minor sites in between, major sites largest — for visual consistency
+  // between the two, even though this page has no line/stacking concerns.
+  const RADIUS_BY_TYPE = { passthrough: 6, minor: 8, site: 10 };
   data.sites.forEach((s) => {
     const color = REGION_STATUS_COLOR[s.status] || "#666";
-    L.circleMarker([s.lat, s.lon], { radius: 6, color, fillColor: color, fillOpacity: 0.9 })
+    L.circleMarker([s.lat, s.lon], {
+      radius: RADIUS_BY_TYPE[s.site_type] || 6, color, fillColor: color, fillOpacity: 0.9,
+    })
       .bindPopup(s.name)
       .addTo(map);
   });

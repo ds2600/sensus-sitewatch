@@ -9,11 +9,23 @@
   <div class="mb-3"><label class="form-label">Longitude</label><input class="form-control" name="lon" type="number" step="any" value="{{ site.lon if site else '' }}" required></div>
   <div class="mb-3">
     <label class="form-label">Type</label>
-    <select class="form-select" name="site_type">
-      <option value="site" {{ 'selected' if not site or site.site_type == 'site' else '' }}>Site (has equipment)</option>
+    <select class="form-select" name="site_type"
+            onchange="document.getElementById('parent-site-field').classList.toggle('d-none', this.value !== 'minor');">
+      <option value="site" {{ 'selected' if not site or site.site_type == 'site' else '' }}>Major Site (has equipment)</option>
       <option value="passthrough" {{ 'selected' if site and site.site_type == 'passthrough' else '' }}>Passthrough (map waypoint only, no equipment)</option>
+      <option value="minor" {{ 'selected' if site and site.site_type == 'minor' else '' }}>Minor Site (child of a Major Site)</option>
     </select>
     <div class="form-text">Passthrough: map marker only, no devices.</div>
+  </div>
+  <div class="mb-3 {{ 'd-none' if not site or site.site_type != 'minor' }}" id="parent-site-field">
+    <label class="form-label">Parent Major Site</label>
+    <select class="form-select" name="parent_site_id">
+      <option value="">&mdash; none &mdash;</option>
+      {% for m in major_sites %}
+      <option value="{{ m.id }}" {{ 'selected' if site and site.parent_site_id == m.id }}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Its status is forced down if this Major Site goes fully down or unreachable.</div>
   </div>
   <div class="mb-3"><label class="form-label">Region</label>
     <select class="form-select" name="region_id">

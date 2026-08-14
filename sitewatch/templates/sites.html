@@ -19,14 +19,21 @@
 {% if not sites %}
 <p class="text-body-secondary">No sites yet.{% if current_user.is_admin %} <a href="{{ url_for('sites.add_site') }}">Add the first one</a>.{% endif %}</p>
 {% else %}
+{% set type_labels = {"site": "Major Site", "passthrough": "Passthrough", "minor": "Minor Site"} %}
 <table class="table">
-  <thead><tr><th>Name</th><th>Region</th><th>Status</th><th>Source</th></tr></thead>
+  <thead><tr><th>Name</th><th>Type</th><th>Region</th><th>Status</th><th>Source</th></tr></thead>
   <tbody>
     {% for s in sites %}
     <tr data-href="{{ url_for('sites.site_detail', site_id=s.id) }}">
       <td>
         <a href="{{ url_for('sites.site_detail', site_id=s.id) }}">{{ s.name }}</a>
         {% if current_user.is_admin %}<a href="{{ url_for('sites.edit_site', site_id=s.id) }}" class="text-body-secondary small ms-1">edit</a>{% endif %}
+      </td>
+      <td>
+        {{ type_labels.get(s.site_type, s.site_type) }}
+        {% if s.site_type == 'minor' and s.parent_site %}
+        <a href="{{ url_for('sites.site_detail', site_id=s.parent_site.id) }}" class="text-body-secondary small">({{ s.parent_site.name }})</a>
+        {% endif %}
       </td>
       <td>{{ s.region.name if s.region else '—' }}</td>
       <td><span class="badge bg-{{ 'success' if statuses[s.id]=='green' else ('warning' if statuses[s.id]=='yellow' else ('primary' if statuses[s.id]=='blue' else ('dark' if statuses[s.id]=='passthrough' else 'danger'))) }}">{{ statuses[s.id] }}</span></td>

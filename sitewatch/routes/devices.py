@@ -62,7 +62,7 @@ def add_device():
         db.session.commit()
         return redirect(url_for("devices.device_detail", device_id=device.id))
     return render_template("device_form.html", device=None,
-                            sites=Site.query.filter_by(site_type="site").all(),
+                            sites=Site.query.filter(Site.site_type.in_(["site", "minor"])).all(),
                             vendors=VENDORS, snmp_versions=SNMP_VERSIONS,
                             preselected_site_id=request.args.get("site_id", type=int))
 
@@ -210,7 +210,7 @@ def edit_device(device_id):
         db.session.commit()
         return redirect(url_for("devices.device_detail", device_id=device.id))
     return render_template("device_form.html", device=device,
-                            sites=Site.query.filter_by(site_type="site").all(),
+                            sites=Site.query.filter(Site.site_type.in_(["site", "minor"])).all(),
                             vendors=VENDORS, snmp_versions=SNMP_VERSIONS)
 
 

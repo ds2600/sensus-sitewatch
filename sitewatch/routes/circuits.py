@@ -42,7 +42,8 @@ def _form_options():
         "roles_for_form": [{"id": r.id, "label": f"{r.name} ({r.tier})"} for r in CircuitRole.query.all()],
         "bundles_for_form": [{"id": b.id, "label": b.name}
                               for b in Circuit.query.filter_by(interface_a_id=None, interface_b_id=None).all()],
-        "sites_for_form": [{"id": s.id, "label": s.name + (" (passthrough)" if s.site_type == "passthrough" else "")}
+        "sites_for_form": [{"id": s.id, "label": s.name + (" (passthrough)" if s.site_type == "passthrough"
+                            else " (minor)" if s.site_type == "minor" else "")}
                             for s in Site.query.all()],
     }
 

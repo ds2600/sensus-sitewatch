@@ -71,8 +71,8 @@ def _export_sites():
     return {
         "sites": [
             {"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
-             "site_type": s.site_type, "region_id": s.region_id,
-             "netbox_id": s.netbox_id, "source": s.source}
+             "site_type": s.site_type, "parent_site_id": s.parent_site_id,
+             "region_id": s.region_id, "netbox_id": s.netbox_id, "source": s.source}
             for s in Site.query.all()
         ],
         # Region (site grouping, not MapRegion) is owned by sites the same
@@ -209,6 +209,7 @@ def _load_sites(data):
         db.session.add(Site(
             id=s["id"], name=s["name"], lat=s["lat"], lon=s["lon"],
             site_type=s.get("site_type", "site"),
+            parent_site_id=s.get("parent_site_id"),
             region_id=s.get("region_id"),
             netbox_id=s.get("netbox_id"), source=s.get("source", "manual"),
             out_of_sync=False,

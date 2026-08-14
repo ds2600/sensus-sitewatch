@@ -14,9 +14,30 @@
   {% endif %}
 </div>
 
+{% if site.site_type == 'minor' and site.parent_site %}
+<p class="text-body-secondary small mt-2">
+  Part of <a href="{{ url_for('sites.site_detail', site_id=site.parent_site.id) }}">{{ site.parent_site.name }}</a>
+  {% if status == 'red' and parent_status in ('red', 'blue') %}
+  <span class="text-danger">— forced down: parent is {{ 'unreachable' if parent_status == 'blue' else 'down' }}.</span>
+  {% endif %}
+</p>
+{% endif %}
+
 {% if site.site_type == 'passthrough' %}
 <p class="text-muted mt-4">Passthrough location — a map waypoint with no equipment installed.</p>
 {% else %}
+{% if site.minor_sites %}
+<h5 class="mt-4">Minor sites</h5>
+<ul class="list-group mb-4">
+  {% for m in site.minor_sites %}
+  {% set m_status = minor_site_statuses[m.id] %}
+  <li class="list-group-item d-flex align-items-center gap-2">
+    <a href="{{ url_for('sites.site_detail', site_id=m.id) }}">{{ m.name }}</a>
+    <span class="badge bg-{{ 'success' if m_status=='green' else ('warning' if m_status=='yellow' else ('primary' if m_status=='blue' else 'danger')) }}">{{ m_status }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
 <div class="d-flex align-items-center gap-2 mt-4">
   <h5 class="mb-0">Devices</h5>
   {% if current_user.is_admin %}

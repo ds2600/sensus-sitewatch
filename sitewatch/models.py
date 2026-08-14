@@ -13,7 +13,7 @@ VENDORS = ("ios-xe", "ios-xr", "junos")
 SOURCES = ("manual", "netbox")
 CIRCUIT_TIERS = ("critical", "auxiliary")
 CIRCUIT_STATES = ("up", "degraded", "down", "admin_down", "unreachable")
-SITE_TYPES = ("site", "passthrough")
+SITE_TYPES = ("site", "passthrough", "minor")
 USER_ROLES = ("admin", "read_only")
 
 
@@ -99,7 +99,14 @@ class Site(db.Model):
     name = db.Column(db.String(120), nullable=False)
     lat = db.Column(db.Float, nullable=False)
     lon = db.Column(db.Float, nullable=False)
-    site_type = db.Column(db.String(20), default="site")  # site | passthrough — see SITE_TYPES
+    site_type = db.Column(db.String(20), default="site")  # site | passthrough | minor — see SITE_TYPES
+    # Only meaningful when site_type == "minor" — the Major Site (site_type
+    # == "site") this one's status can cascade from. One level only: a
+    # minor site's parent must itself be a plain Major Site, never another
+    # minor site or a passthrough (enforced in routes/sites.py, not here) —
+    # that's what keeps compute_site_status()'s parent-status recursion
+    # (status.py) safely bounded to a single hop.
+    parent_site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)
     region_id = db.Column(db.Integer, db.ForeignKey("region.id"), nullable=True)
     netbox_id = db.Column(db.Integer, nullable=True)
     source = db.Column(db.String(20), default="manual")
@@ -108,6 +115,7 @@ class Site(db.Model):
 
     devices = db.relationship("Device", backref="site", lazy=True)
     region = db.relationship("Region", backref="sites")
+    minor_sites = db.relationship("Site", backref=db.backref("parent_site", remote_side=[id]), lazy=True)
 
 
 class Device(db.Model):
