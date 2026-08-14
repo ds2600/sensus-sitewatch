@@ -63,3 +63,41 @@
                 'blue': 'unreachable', 'passthrough': 'not monitored'} %}
 {{ status_badge(words.get(status, status)) }}
 {% endmacro %}
+
+{# Shared by site_detail.html for both a passthrough site's own page and a
+   major/minor site's "Circuits passing through" section — transit is the
+   list of {circuit, prev_site, next_site, site_a, site_b} dicts routes.py's
+   _passthrough_transit() builds. table_id must be unique on the page (the
+   datatable JS keys its pagination control off it). #}
+{% macro passthrough_transit_table(transit, table_id) %}
+{% if not transit %}
+<p class="text-muted">No circuits route through here.</p>
+{% else %}
+<div class="datatable" id="{{ table_id }}" data-page-size="25">
+<table class="table table-sm">
+  <thead><tr>
+    <th data-sort="circuit">Circuit</th>
+    <th data-sort="state" data-sort-attr="data-value">State</th>
+    <th>Prev &rarr; Next</th>
+    <th data-sort="a_end">A end</th>
+    <th data-sort="z_end">Z end</th>
+  </tr></thead>
+  <tbody>
+    {% for t in transit %}
+    <tr>
+      <td><a class="circuit" href="{{ url_for('circuits.circuit_detail', circuit_id=t.circuit.id) }}">{{ t.circuit.name }}</a></td>
+      <td class="state" data-value="{{ t.circuit.current_state }}">{{ circuit_status_badge(t.circuit.current_state) }}</td>
+      <td>
+        {% if t.prev_site %}<a href="{{ url_for('sites.site_detail', site_id=t.prev_site.id) }}">{{ t.prev_site.name }}</a>{% else %}—{% endif %}
+        &rarr;
+        {% if t.next_site %}<a href="{{ url_for('sites.site_detail', site_id=t.next_site.id) }}">{{ t.next_site.name }}</a>{% else %}—{% endif %}
+      </td>
+      <td class="a_end">{% if t.site_a %}<a href="{{ url_for('sites.site_detail', site_id=t.site_a.id) }}">{{ t.site_a.name }}</a>{% else %}—{% endif %}</td>
+      <td class="z_end">{% if t.site_b %}<a href="{{ url_for('sites.site_detail', site_id=t.site_b.id) }}">{{ t.site_b.name }}</a>{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endmacro %}

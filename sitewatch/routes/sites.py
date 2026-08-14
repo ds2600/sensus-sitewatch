@@ -225,23 +225,35 @@ def delete_site(site_id):
 
 
 def _passthrough_transit(site):
-    """For a passthrough site (a cosmetic map waypoint, never a real
-    circuit endpoint): every root circuit whose drawn path — site_a ->
-    effective_waypoints -> site_b, the same path map.js renders — passes
-    through this site, with the immediate neighbor point on each side
-    (which may be the circuit's own A/Z end, if this site is the first or
-    last waypoint) plus the circuit's real A/Z ends regardless. A circuit
-    can in principle route through the same site twice; each occurrence is
-    its own row rather than only reporting the first."""
+    """Every root circuit whose drawn path — site_a -> effective_waypoints
+    -> site_b, the same path map.js renders — passes through this site as
+    one of its cosmetic waypoints (never as the circuit's own A/Z end, even
+    when that end happens to equal this site — see the range() below),
+    with the immediate neighbor point on each side (which may be the
+    circuit's own A/Z end, if this site is the first or last waypoint)
+    plus the circuit's real A/Z ends regardless. Usually called for a
+    passthrough site (a waypoint is usually one, and never anyone's real
+    end since a passthrough site has no devices/interfaces to be one), but
+    works for any site: a major/minor site can still be picked as some
+    OTHER circuit's waypoint — see circuit_form.html's waypoint picker,
+    which lists every site. A circuit can in principle route through the
+    same site twice; each occurrence is its own row rather than only
+    reporting the first."""
     results = []
     for c in Circuit.query.filter_by(parent_circuit_id=None).all():
         path = [c.site_a] + [w.site for w in c.effective_waypoints] + [c.site_b]
-        for i, point in enumerate(path):
+        # 1..len-2 only — path[0]/path[-1] are the circuit's own real A/Z
+        # ends, not waypoints, even on a major/minor site that happens to
+        # BE that circuit's own end (already covered by Intra-site/
+        # External circuits on that site's own page; listing it again here
+        # too would be a bogus "passes through itself" duplicate row).
+        for i in range(1, len(path) - 1):
+            point = path[i]
             if point and point.id == site.id:
                 results.append({
                     "circuit": c,
-                    "prev_site": path[i - 1] if i > 0 else None,
-                    "next_site": path[i + 1] if i < len(path) - 1 else None,
+                    "prev_site": path[i - 1],
+                    "next_site": path[i + 1],
                     "site_a": c.site_a,
                     "site_b": c.site_b,
                 })
@@ -264,7 +276,7 @@ def site_detail(site_id):
         if c.site_a_id_safe() == site_id or c.site_b_id_safe() == site_id
     ]
     intra_site_circuits = [c for c in root_circuits if c.is_intra_site]
-    passthrough_transit = _passthrough_transit(site) if site.site_type == "passthrough" else []
+    passthrough_transit = _passthrough_transit(site)
     return render_template(
         "site_detail.html", site=site, status=status, parent_status=parent_status,
         minor_site_statuses=minor_site_statuses,

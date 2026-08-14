@@ -16,7 +16,8 @@
 //       <tbody>...</tbody>
 //     </table>
 //   </div>
-// A table with zero rows (empty state) is left alone.
+// A table with zero rows (empty state) is left alone. Every table starts
+// sorted ascending by its first sortable column.
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".datatable").forEach((container) => {
     const table = container.querySelector("table");
@@ -76,5 +77,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const size = sizeSelect.value === "all" ? Math.max(list.size(), 1) : parseInt(sizeSelect.value, 10);
       list.show(1, size);
     });
+
+    // Default sort: first sortable column, ascending — every table starts
+    // in a predictable order instead of raw insertion order.
+    if (sortHeaders.length) {
+      list.sort(sortHeaders[0].dataset.sort, { order: "asc" });
+    }
   });
 });
