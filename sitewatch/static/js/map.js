@@ -210,7 +210,7 @@ async function loadMap() {
     L.circleMarker([s.lat, s.lon], {
       radius: 8, color: STATUS_COLOR[s.status], fillColor: STATUS_COLOR[s.status],
       fillOpacity: 0.9,
-    }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a> (minor)`).addTo(map).bringToFront();
+    }).bindPopup(`<a href="/sites/${s.id}">${s.name}</a>`).addTo(map).bringToFront();
   });
 
   data.sites.filter((s) => s.site_type === "site").forEach((s) => {

@@ -8,7 +8,7 @@ from sitewatch.extensions import db
 from sitewatch.models import Device, Site, Circuit, VENDORS, SNMP_VERSIONS
 from sitewatch.discovery import perform_walk
 from sitewatch.poller import poll_device_now
-from sitewatch import job_log, cooldown
+from sitewatch import job_log, cooldown, audit_log
 from sitewatch.csv_import import parse_csv, CsvImportError
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
@@ -38,6 +38,14 @@ def _apply_credentials(device, f):
             device.snmpv3_priv_key = f["snmpv3_priv_key"]
 
 
+def _credentials_touched(f):
+    """True if the submitted form included any credential value — used to
+    mark audit details with a boolean flag only, never the actual value
+    (or its ciphertext, which is non-deterministic per Fernet encryption
+    and would falsely show as "changed" on every save regardless)."""
+    return bool(f.get("snmp_community") or f.get("snmpv3_auth_key") or f.get("snmpv3_priv_key"))
+
+
 @devices_bp.route("/")
 @login_required
 def list_devices():
@@ -59,6 +67,12 @@ def add_device():
         )
         _apply_credentials(device, f)
         db.session.add(device)
+        db.session.flush()
+        details = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
+                   "vendor": device.vendor, "snmp_version": device.snmp_version}
+        if _credentials_touched(f):
+            details["credentials_updated"] = True
+        audit_log.record("create", "Device", device.id, device.hostname, details)
         db.session.commit()
         return redirect(url_for("devices.device_detail", device_id=device.id))
     return render_template("device_form.html", device=None,
@@ -164,11 +178,15 @@ def import_devices_confirm():
     if not hostnames:
         flash("Nothing to import.")
         return redirect(url_for("devices.import_devices"))
+    created = []
     for site_id, hostname, mgmt_ip, vendor in zip(site_ids, hostnames, mgmt_ips, vendors):
         db.session.add(Device(
             site_id=int(site_id), hostname=hostname, mgmt_ip=mgmt_ip,
             vendor=vendor, snmp_version="v2c", source="manual",
         ))
+        created.append({"hostname": hostname, "site_id": int(site_id)})
+    audit_log.record("import", "Device", None, f"CSV import: {len(hostnames)} device(s)",
+                      {"count": len(hostnames), "created": created})
     db.session.commit()
     flash(f"Imported {len(hostnames)} device(s). Add SNMP credentials on each device's Edit page before polling.")
     return redirect(url_for("devices.list_devices"))
@@ -201,12 +219,21 @@ def edit_device(device_id):
         if site.site_type == "passthrough":
             flash("Passthrough sites can't have devices assigned.")
             return redirect(url_for("devices.edit_device", device_id=device_id))
+        before = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
+                  "vendor": device.vendor, "snmp_version": device.snmp_version}
         device.site_id = site.id
         device.hostname = f["hostname"]
         device.mgmt_ip = f["mgmt_ip"]
         device.vendor = f["vendor"]
         device.snmp_version = f["snmp_version"]
         _apply_credentials(device, f)
+        after = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
+                 "vendor": device.vendor, "snmp_version": device.snmp_version}
+        diff = audit_log.diff_fields(before, after)
+        if _credentials_touched(f):
+            diff["credentials_updated"] = True
+        if diff:
+            audit_log.record("update", "Device", device.id, device.hostname, diff)
         db.session.commit()
         return redirect(url_for("devices.device_detail", device_id=device.id))
     return render_template("device_form.html", device=device,
@@ -225,7 +252,9 @@ def delete_device(device_id):
     if in_use:
         flash(f"In use by circuit '{in_use.name}' — delete that first.")
         return redirect(url_for("devices.device_detail", device_id=device_id))
+    hostname = device.hostname
     db.session.delete(device)  # interfaces cascade-delete automatically
+    audit_log.record("delete", "Device", device_id, hostname)
     db.session.commit()
     return redirect(url_for("devices.list_devices"))
 

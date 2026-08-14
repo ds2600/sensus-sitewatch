@@ -15,7 +15,7 @@ from sitewatch.poller import (
     get_poller_status, pause_poller, resume_poller, poller_enabled_for_process, reschedule_poller,
     poll_device_now, poll_all_devices,
 )
-from sitewatch import job_log, cooldown
+from sitewatch import job_log, cooldown, audit_log
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -32,12 +32,17 @@ _POLL_ALL_TARGET = "poll_all_now"
 def index():
     if request.method == "POST":
         old_interval = Setting.get("polling_interval_minutes")
+        before = {k: Setting.get(k) for k in Setting.DEFAULTS}
         for key in Setting.DEFAULTS:
             if key == "poll_on_startup":
                 continue  # checkbox — unchecked means absent from request.form entirely, handled below
             if key in request.form:
                 Setting.set(key, request.form[key])
         Setting.set("poll_on_startup", "1" if request.form.get("poll_on_startup") else "0")
+        after = {k: Setting.get(k) for k in Setting.DEFAULTS}
+        diff = audit_log.diff_fields(before, after)
+        if diff:
+            audit_log.record("update", "Setting", None, "Settings updated", diff)
         db.session.commit()
         new_interval = request.form.get("polling_interval_minutes")
         if new_interval and new_interval != old_interval:
@@ -179,7 +184,10 @@ def poll_all_now():
 @settings_bp.route("/roles/add", methods=["POST"])
 @admin_required
 def add_role():
-    db.session.add(CircuitRole(name=request.form["name"], tier=request.form["tier"]))
+    role = CircuitRole(name=request.form["name"], tier=request.form["tier"])
+    db.session.add(role)
+    db.session.flush()
+    audit_log.record("create", "CircuitRole", role.id, role.name, {"tier": role.tier})
     db.session.commit()
     return redirect(url_for("settings.index"))
 
@@ -188,7 +196,10 @@ def add_role():
 @admin_required
 def update_role(role_id):
     role = CircuitRole.query.get_or_404(role_id)
+    old_tier = role.tier
     role.tier = request.form["tier"]
+    if role.tier != old_tier:
+        audit_log.record("update", "CircuitRole", role.id, role.name, {"tier": {"old": old_tier, "new": role.tier}})
     db.session.commit()
     return redirect(url_for("settings.index"))
 
@@ -200,7 +211,9 @@ def delete_role(role_id):
     if Circuit.query.filter_by(role_id=role.id).first():
         flash(f"'{role.name}' is in use by circuits — reassign them first.")
         return redirect(url_for("settings.index"))
+    name = role.name
     db.session.delete(role)
+    audit_log.record("delete", "CircuitRole", role_id, name)
     db.session.commit()
     return redirect(url_for("settings.index"))
 
@@ -215,7 +228,10 @@ def add_site_region():
     if Region.query.filter_by(name=name).first():
         flash(f"A region named '{name}' already exists.")
         return redirect(url_for("settings.index"))
-    db.session.add(Region(name=name))
+    region = Region(name=name)
+    db.session.add(region)
+    db.session.flush()
+    audit_log.record("create", "Region", region.id, region.name)
     db.session.commit()
     return redirect(url_for("settings.index"))
 
@@ -227,7 +243,9 @@ def delete_site_region(region_id):
     if Site.query.filter_by(region_id=region.id).first():
         flash(f"'{region.name}' is in use by sites — reassign them first.")
         return redirect(url_for("settings.index"))
+    name = region.name
     db.session.delete(region)
+    audit_log.record("delete", "Region", region_id, name)
     db.session.commit()
     return redirect(url_for("settings.index"))
 
@@ -286,6 +304,24 @@ def import_backup():
         flash(str(e))
         return redirect(url_for("settings.index"))
 
+    # import_data() already committed internally (wipe+reload is its own
+    # transaction) — this can't ride the same commit the way every other
+    # route's audit call does, so it gets one short transaction of its own
+    # right after. One coarse row per scope: a wipe+reload has no per-row
+    # identity to diff against (see backup.py), so counts straight from the
+    # parsed upload are the most this can honestly report. Only keys
+    # actually present in the uploaded JSON are counted — that already
+    # matches exactly what this scope touched, per backup.py's contract
+    # that a scope's export only contains its own relevant section(s).
+    counts = {k: len(v) for k, v in {
+        "sites": data.get("sites"), "site_regions": data.get("site_regions"),
+        "devices": data.get("devices"), "interfaces": data.get("interfaces"),
+        "circuit_roles": data.get("circuit_roles"), "circuits": data.get("circuits"),
+        "regions": data.get("regions"), "settings": data.get("settings"),
+    }.items() if v is not None}
+    audit_log.record("import", "Backup", None, f"scope={scope}", {"counts": counts})
+    db.session.commit()
+
     if scope in ("all", "devices"):
         flash("Import complete. Re-enter device credentials — not included in backups.")
         return redirect(url_for("devices.list_devices"))
@@ -310,6 +346,8 @@ def add_user():
     user = User(username=username, role=role)
     user.set_password(password)
     db.session.add(user)
+    db.session.flush()
+    audit_log.record("create", "User", user.id, user.username, {"role": role})
     db.session.commit()
     flash(f"User '{username}' added.")
     return redirect(url_for("settings.index"))
@@ -326,7 +364,10 @@ def update_user_role(user_id):
     if user.id == current_user.id and role != "admin":
         flash("You can't demote your own account.")
         return redirect(url_for("settings.index"))
+    old_role = user.role
     user.role = role
+    if user.role != old_role:
+        audit_log.record("update", "User", user.id, user.username, {"role": {"old": old_role, "new": role}})
     db.session.commit()
     return redirect(url_for("settings.index"))
 
@@ -340,6 +381,7 @@ def reset_user_password(user_id):
         flash("Enter a new password.")
         return redirect(url_for("settings.index"))
     user.set_password(password)
+    audit_log.record("update", "User", user.id, user.username, {"password_reset": True})
     db.session.commit()
     flash(f"Password updated for '{user.username}'.")
     return redirect(url_for("settings.index"))
@@ -357,6 +399,8 @@ def delete_user(user_id):
     if user.id == current_user.id:
         flash("You can't delete your own account.")
         return redirect(url_for("settings.index"))
+    username = user.username
     db.session.delete(user)
+    audit_log.record("delete", "User", user_id, username)
     db.session.commit()
     return redirect(url_for("settings.index"))

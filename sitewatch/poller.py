@@ -36,12 +36,13 @@ from sitewatch.snmp import SnmpError
 from sitewatch.snmp import new_engine as new_snmp_engine
 from sitewatch.status import recompute_bundle_state, rollup_degree_status
 from sitewatch.integrations.webhook_payload import send_down_alerts
-from sitewatch import job_log
+from sitewatch import job_log, audit_log
 
 log = logging.getLogger(__name__)
 
 POLLER_JOB_ID = "poll_all_devices"
 STARTUP_POLL_JOB_ID = "poll_all_devices_startup"
+AUDIT_PRUNE_JOB_ID = "audit_log_prune"
 
 # Set for the duration of an actual sweep so get_poller_status() can tell
 # "waiting for next cycle" apart from "sweep in progress right now" —
@@ -450,6 +451,15 @@ def start_poller(app):
         job_log.run_job(job_id, poll_all_devices, app)
 
     scheduler.add_job(job, "interval", minutes=minutes, id=POLLER_JOB_ID, replace_existing=True)
+
+    def audit_prune():
+        job_id = job_log.start_job("Audit log prune")
+        job_log.run_job(job_id, audit_log.prune_old_entries, app)
+
+    # Fixed off-peak time, not an "interval, days=1" trigger — that would
+    # drift to whatever time-of-day the process last happened to restart
+    # at instead of running at a consistent, predictable hour.
+    scheduler.add_job(audit_prune, "cron", hour=3, minute=30, id=AUDIT_PRUNE_JOB_ID, replace_existing=True)
     scheduler.start()
     if not enabled:
         # Restore whatever start/stop state was last set from the UI —

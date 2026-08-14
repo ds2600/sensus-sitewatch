@@ -6,6 +6,7 @@ from sitewatch.extensions import db
 from sitewatch.models import Site, Circuit, Region, SITE_TYPES
 from sitewatch.status import compute_site_status, site_degree_breakdown
 from sitewatch.csv_import import parse_csv, CsvImportError
+from sitewatch import audit_log
 
 sites_bp = Blueprint("sites", __name__, url_prefix="/sites")
 
@@ -70,6 +71,11 @@ def add_site():
             source="manual",
         )
         db.session.add(site)
+        db.session.flush()
+        audit_log.record("create", "Site", site.id, site.name, {
+            "lat": site.lat, "lon": site.lon, "site_type": site.site_type,
+            "parent_site_id": site.parent_site_id, "region_id": site.region_id,
+        })
         db.session.commit()
         return redirect(url_for("sites.list_sites"))
     return render_template("site_form.html", site=None, regions=Region.query.order_by(Region.name).all(),
@@ -170,12 +176,17 @@ def import_sites_confirm():
     if not names:
         flash("Nothing to import.")
         return redirect(url_for("sites.import_sites"))
+    created = []
     for name, lat, lon, site_type in zip(names, lats, lons, types):
+        resolved_type = site_type if site_type in ("site", "passthrough") else "site"
         db.session.add(Site(
             name=name, lat=float(lat), lon=float(lon),
-            site_type=site_type if site_type in ("site", "passthrough") else "site",
+            site_type=resolved_type,
             source="manual",
         ))
+        created.append({"name": name, "site_type": resolved_type})
+    audit_log.record("import", "Site", None, f"CSV import: {len(names)} site(s)",
+                      {"count": len(names), "created": created})
     db.session.commit()
     flash(f"Imported {len(names)} site(s).")
     return redirect(url_for("sites.list_sites"))
@@ -196,12 +207,19 @@ def edit_site(site_id):
         if error:
             flash(error)
             return redirect(url_for("sites.edit_site", site_id=site_id))
+        before = {"name": site.name, "lat": site.lat, "lon": site.lon, "site_type": site.site_type,
+                  "parent_site_id": site.parent_site_id, "region_id": site.region_id}
         site.name = request.form["name"]
         site.lat = float(request.form["lat"])
         site.lon = float(request.form["lon"])
         site.site_type = site_type
         site.parent_site_id = parent_site_id
         site.region_id = request.form.get("region_id", type=int) or None
+        after = {"name": site.name, "lat": site.lat, "lon": site.lon, "site_type": site.site_type,
+                 "parent_site_id": site.parent_site_id, "region_id": site.region_id}
+        diff = audit_log.diff_fields(before, after)
+        if diff:
+            audit_log.record("update", "Site", site.id, site.name, diff)
         db.session.commit()
         return redirect(url_for("sites.site_detail", site_id=site.id))
     return render_template("site_form.html", site=site, regions=Region.query.order_by(Region.name).all(),
@@ -219,7 +237,9 @@ def delete_site(site_id):
     if site.minor_sites:
         flash("Has minor sites assigned — remove or reassign them first.")
         return redirect(url_for("sites.site_detail", site_id=site_id))
+    name = site.name
     db.session.delete(site)
+    audit_log.record("delete", "Site", site_id, name)
     db.session.commit()
     return redirect(url_for("sites.list_sites"))
 

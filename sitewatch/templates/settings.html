@@ -55,6 +55,10 @@
       </div>
       <div class="mb-3"><label class="form-label">Status history retention (days)</label>
         <input class="form-control" name="status_history_retention_days" value="{{ values.status_history_retention_days }}"></div>
+      <div class="mb-3"><label class="form-label">Audit log retention (days)</label>
+        <input class="form-control" name="audit_log_retention_days" value="{{ values.audit_log_retention_days }}">
+        <div class="form-text">0 keeps every entry forever. Pruned once a day.</div>
+      </div>
       <div class="mb-3"><label class="form-label">Incident number prefix</label>
         <input class="form-control" name="incident_number_prefix" value="{{ values.incident_number_prefix }}">
         <div class="form-text">Prefixes SiteWatch's own down-incident numbers (e.g. "{{ values.incident_number_prefix }}-000123"). Only applies going forward — existing incident numbers don't change.</div>

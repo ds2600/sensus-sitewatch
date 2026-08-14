@@ -52,6 +52,7 @@ class Setting(db.Model):
         "google_chat_webhook_url": "",
         "sitewatch_url": "",
         "status_history_retention_days": "30",
+        "audit_log_retention_days": "90",
         "poller_max_workers": "8",
         "incident_number_prefix": "INC",
         "poll_on_startup": "0",
@@ -484,3 +485,45 @@ class MapRegion(db.Model):
     center_lon = db.Column(db.Float, nullable=False)
     zoom = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class AuditLog(db.Model):
+    """Durable, queryable record of human-initiated create/update/delete
+    (and mute/unmute/import) actions on user-managed objects. Written
+    explicitly by sitewatch/audit_log.py's record(), called from routes
+    right alongside their own db.session.commit() — deliberately not an
+    automatic ORM/session hook, so every entry can carry a hand-crafted,
+    readable label/diff instead of a generic column dump, and so poller-
+    driven writes (which have no current_user at all) are never at risk
+    of getting swept in by accident. See routes/*.py for call sites.
+
+    Never touched by backup.py — joins User/CircuitStatusHistory/AlertMute/
+    UtilizationRollup in being permanently excluded from every export/
+    import scope (see that module's docstring); an audit trail that could
+    be silently overwritten by importing an old backup would defeat the
+    point of having one. Pruned by a daily job per Setting
+    "audit_log_retention_days" — see audit_log.prune_old_entries()."""
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    # Nullable so deleting a User (settings.py's delete_user()) never blocks
+    # or cascades onto their own past audit rows. username is a point-in-
+    # time snapshot so those rows stay legible after that user is gone —
+    # the acting user's own history must survive their own deletion.
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    username = db.Column(db.String(80), nullable=False)
+    user = db.relationship("User")
+
+    action = db.Column(db.String(20), nullable=False, index=True)  # create | update | delete | import | mute | unmute
+    # Matches the model class name (or "Backup" for a scope-level import) —
+    # not a DB-enforced FK, since object_id may point at a row from any
+    # one of several tables depending on this column.
+    object_type = db.Column(db.String(40), nullable=False, index=True)
+    object_id = db.Column(db.Integer, nullable=True)  # null for a bulk import or a Setting batch save — no single row
+    label = db.Column(db.String(200), nullable=False)  # name/hostname/username snapshot, so a delete/rename still reads
+
+    details = db.Column(db.Text, nullable=True)  # JSON — diff or snapshot; never credential values, see audit_log.py
+
+    __table_args__ = (
+        db.Index("ix_audit_log_object", "object_type", "object_id"),
+    )

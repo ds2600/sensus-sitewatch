@@ -18,6 +18,7 @@
       <a class="nav-link" href="{{ url_for('circuits.list_circuits') }}">Circuits</a>
       {% if current_user.is_admin %}
       <a class="nav-link" href="{{ url_for('settings.index') }}">Settings</a>
+      <a class="nav-link" href="{{ url_for('audit.index') }}">Audit Log</a>
       <a class="nav-link" href="/api/docs">API Docs</a>
       {% endif %}
     </div>

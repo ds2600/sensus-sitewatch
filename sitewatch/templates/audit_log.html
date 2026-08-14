@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+<h4>Audit Log</h4>
+<p class="text-body-secondary small">Every create/update/delete action taken through the app. Not device/circuit
+  telemetry — see Background Activity for poll cycles and repolls.</p>
+
+<form method="get" class="row row-cols-lg-auto g-2 align-items-center mb-3">
+  <div class="col-12">
+    <select class="form-select form-select-sm" name="username">
+      <option value="">All users</option>
+      {% for u in usernames %}
+      <option value="{{ u }}" {{ 'selected' if filters.username == u }}>{{ u }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12">
+    <select class="form-select form-select-sm" name="object_type">
+      <option value="">All object types</option>
+      {% for t in object_types %}
+      <option value="{{ t }}" {{ 'selected' if filters.object_type == t }}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12">
+    <select class="form-select form-select-sm" name="action">
+      <option value="">All actions</option>
+      {% for a in actions %}
+      <option value="{{ a }}" {{ 'selected' if filters.action == a }}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12">
+    <input type="date" class="form-control form-control-sm" name="date_from" value="{{ filters.date_from }}" placeholder="From">
+  </div>
+  <div class="col-12">
+    <input type="date" class="form-control form-control-sm" name="date_to" value="{{ filters.date_to }}" placeholder="To">
+  </div>
+  <div class="col-12">
+    <input type="hidden" name="per_page" value="{{ per_page }}">
+    <button type="submit" class="btn btn-outline-primary btn-sm">Filter</button>
+    {% if filters.username or filters.object_type or filters.action or filters.date_from or filters.date_to %}
+    <a href="{{ url_for('audit.index') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if not entries %}
+<p class="text-muted">No matching audit entries.</p>
+{% else %}
+<table class="table table-sm">
+  <thead><tr>
+    <th>Time (UTC)</th>
+    <th>Actor</th>
+    <th>Action</th>
+    <th>Object</th>
+    <th>Label</th>
+    <th>Details</th>
+  </tr></thead>
+  <tbody>
+    {% for e in entries %}
+    <tr>
+      <td class="text-nowrap">{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      <td>{{ e.username }}</td>
+      <td>{{ e.action }}</td>
+      <td>{{ e.object_type }}{% if e.object_id %} #{{ e.object_id }}{% endif %}</td>
+      <td>{{ e.label }}</td>
+      <td>
+        {% if e.details %}
+        <a href="#" class="small" data-bs-toggle="collapse" data-bs-target="#details-{{ e.id }}">view</a>
+        <pre class="collapse small bg-body-tertiary p-2 rounded mt-1 mb-0" id="details-{{ e.id }}">{{ e.details }}</pre>
+        {% else %}
+        <span class="text-muted">&mdash;</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="d-flex justify-content-between align-items-center">
+  <span class="text-body-secondary small">
+    {{ entries|length }} of {{ pagination.total }} — page {{ pagination.page }} of {{ pagination.pages }}
+  </span>
+  <ul class="pagination pagination-sm mb-0">
+    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+      <a class="page-link" href="{{ url_for('audit.index', page=pagination.prev_num, **base_args) if pagination.has_prev else '#' }}">&laquo;</a>
+    </li>
+    {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+    {% if p %}
+    <li class="page-item {{ 'active' if p == pagination.page }}">
+      <a class="page-link" href="{{ url_for('audit.index', page=p, **base_args) }}">{{ p }}</a>
+    </li>
+    {% else %}
+    <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+    {% endif %}
+    {% endfor %}
+    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+      <a class="page-link" href="{{ url_for('audit.index', page=pagination.next_num, **base_args) if pagination.has_next else '#' }}">&raquo;</a>
+    </li>
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

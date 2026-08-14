@@ -9,7 +9,7 @@ from sitewatch.models import (
 )
 from sitewatch.poller import poll_device_now
 from sitewatch.integrations.webhook_payload import send_down_alerts
-from sitewatch import job_log, cooldown
+from sitewatch import job_log, cooldown, audit_log
 from sitewatch.csv_import import parse_csv, CsvImportError
 from sitewatch.utilization import circuit_utilization_history
 
@@ -75,11 +75,17 @@ def _circuit_own_site_ids(circuit):
 
 
 def _set_waypoints(circuit, form):
+    """Returns (old_site_ids, new_site_ids), ordered — callers fold this
+    into the SAME audit_log.record() call as the rest of the circuit's own
+    field diff (only when they actually differ) rather than logging a
+    separate entry, since every save deletes+recreates the whole waypoint
+    set below regardless of whether anything actually changed."""
     ids = [int(x) for x in form.get("waypoint_site_ids", "").split(",") if x]
     own_site_ids = _circuit_own_site_ids(circuit)
     filtered_ids = [site_id for site_id in ids if site_id not in own_site_ids]
     if len(filtered_ids) != len(ids):
         flash("A circuit's own A/Z site can't also be one of its waypoints — dropped from the route.")
+    old_site_ids = [w.site_id for w in circuit.waypoints] if circuit.id is not None else []
     if circuit.id is not None:
         # Explicit bulk delete first, not just reassigning circuit.waypoints
         # to a new list — the ORM's delete-orphan cascade doesn't guarantee
@@ -89,6 +95,7 @@ def _set_waypoints(circuit, form):
         # positions are just 0..N-1 every time).
         CircuitWaypoint.query.filter_by(circuit_id=circuit.id).delete()
     circuit.waypoints = [CircuitWaypoint(site_id=site_id, position=i) for i, site_id in enumerate(filtered_ids)]
+    return old_site_ids, filtered_ids
 
 
 def _endpoint_picker_data(exclude_circuit_id=None):
@@ -167,8 +174,22 @@ def add_circuit():
             circuit.capacity_bps_override = int(f["capacity_override"])
         if f.get("utilization_threshold_pct"):
             circuit.utilization_threshold_pct = int(f["utilization_threshold_pct"])
-        _set_waypoints(circuit, f)
+        # circuit.id must still be None here (add()/flush() happen after) —
+        # that's what tells _set_waypoints this is a brand-new circuit with
+        # no existing CircuitWaypoint rows to bulk-delete first.
+        _, new_wp = _set_waypoints(circuit, f)
         db.session.add(circuit)
+        db.session.flush()  # need circuit.id for the audit row below
+        details = {
+            "role_id": circuit.role_id, "parent_circuit_id": circuit.parent_circuit_id,
+            "interface_a_id": circuit.interface_a_id, "interface_b_id": circuit.interface_b_id,
+            "lag_interface_a_id": circuit.lag_interface_a_id, "lag_interface_b_id": circuit.lag_interface_b_id,
+            "capacity_bps_override": circuit.capacity_bps_override,
+            "utilization_threshold_pct": circuit.utilization_threshold_pct,
+        }
+        if new_wp:
+            details["waypoints"] = new_wp
+        audit_log.record("create", "Circuit", circuit.id, circuit.name, details)
         db.session.commit()
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit.id))
 
@@ -339,6 +360,7 @@ def import_circuits_confirm():
 
     created_bundles = {}  # lowercased name -> Circuit, so rows sharing a new parent name reuse the same bundle
     count = 0
+    created = []
     for name, role_id, ia, ib, pid, pnew in zip(
         names, role_ids, interface_a_ids, interface_b_ids, parent_ids, parent_new_names
     ):
@@ -357,7 +379,12 @@ def import_circuits_confirm():
             interface_a_id=int(ia), interface_b_id=int(ib),
             parent_circuit_id=parent_circuit_id,
         ))
+        created.append({"name": name, "role_id": int(role_id)})
         count += 1
+    audit_log.record("import", "Circuit", None, f"CSV import: {count} circuit(s)", {
+        "count": count, "created": created,
+        "bundles_created": [b.name for b in created_bundles.values()],
+    })
     db.session.commit()
     created_bundle_note = f" ({len(created_bundles)} new parent bundle(s) created)" if created_bundles else ""
     flash(f"Imported {count} circuit(s){created_bundle_note}.")
@@ -411,7 +438,12 @@ def list_incidents():
 @login_required
 def set_incident_ticket(history_id):
     history = CircuitStatusHistory.query.get_or_404(history_id)
+    old_ticket = history.external_ticket
     history.external_ticket = request.form.get("external_ticket", "").strip() or None
+    if history.external_ticket != old_ticket:
+        audit_log.record("update", "Circuit", history.circuit_id, history.circuit.name,
+                          {"incident_id": history.id,
+                           "external_ticket": {"old": old_ticket, "new": history.external_ticket}})
     db.session.commit()
     next_url = request.form.get("next")
     if not next_url or not next_url.startswith("/"):
@@ -472,7 +504,10 @@ def attach_member(circuit_id):
     if not member or member.id == bundle.id or member.parent_circuit_id is not None or member.is_bundle:
         flash("Pick an existing, unattached, non-bundle circuit.")
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
+    old_parent = member.parent_circuit_id
     member.parent_circuit_id = bundle.id
+    audit_log.record("update", "Circuit", member.id, member.name,
+                      {"parent_circuit_id": {"old": old_parent, "new": bundle.id}, "attached_to": bundle.name})
     db.session.commit()
     return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
 
@@ -489,6 +524,12 @@ def edit_circuit(circuit_id):
     circuit = Circuit.query.get_or_404(circuit_id)
     if request.method == "POST":
         f = request.form
+        before = {
+            "name": circuit.name, "role_id": circuit.role_id, "parent_circuit_id": circuit.parent_circuit_id,
+            "capacity_bps_override": circuit.capacity_bps_override,
+            "utilization_threshold_pct": circuit.utilization_threshold_pct,
+            "lag_interface_a_id": circuit.lag_interface_a_id, "lag_interface_b_id": circuit.lag_interface_b_id,
+        }
         circuit.name = f["name"]
         circuit.role_id = int(f["role_id"])
         new_parent = int(f["parent_circuit_id"]) if f.get("parent_circuit_id") else None
@@ -505,7 +546,18 @@ def edit_circuit(circuit_id):
         )
         if circuit.is_bundle:
             _set_lag_interfaces(circuit, f)
-        _set_waypoints(circuit, f)
+        old_wp, new_wp = _set_waypoints(circuit, f)
+        after = {
+            "name": circuit.name, "role_id": circuit.role_id, "parent_circuit_id": circuit.parent_circuit_id,
+            "capacity_bps_override": circuit.capacity_bps_override,
+            "utilization_threshold_pct": circuit.utilization_threshold_pct,
+            "lag_interface_a_id": circuit.lag_interface_a_id, "lag_interface_b_id": circuit.lag_interface_b_id,
+        }
+        diff = audit_log.diff_fields(before, after)
+        if old_wp != new_wp:
+            diff["waypoints"] = {"old": old_wp, "new": new_wp}
+        if diff:
+            audit_log.record("update", "Circuit", circuit.id, circuit.name, diff)
         db.session.commit()
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit.id))
 
@@ -527,7 +579,9 @@ def delete_circuit(circuit_id):
     if circuit.children:
         flash(f"Has {len(circuit.children)} member circuit(s) — reassign or delete those first.")
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
+    name = circuit.name
     db.session.delete(circuit)
+    audit_log.record("delete", "Circuit", circuit_id, name)
     db.session.commit()
     return redirect(url_for("circuits.list_circuits"))
 
@@ -535,6 +589,7 @@ def delete_circuit(circuit_id):
 @circuits_bp.route("/<int:circuit_id>/mute", methods=["POST"])
 @admin_required
 def mute_circuit(circuit_id):
+    circuit = Circuit.query.get_or_404(circuit_id)
     minutes = min(int(request.form["minutes"]), Setting.get_int("mute_max_minutes"))
     existing = AlertMute.query.filter_by(circuit_id=circuit_id).first()
     until = datetime.utcnow() + timedelta(minutes=minutes)
@@ -542,6 +597,8 @@ def mute_circuit(circuit_id):
         existing.muted_until = until
     else:
         db.session.add(AlertMute(circuit_id=circuit_id, muted_until=until))
+    audit_log.record("mute", "Circuit", circuit_id, circuit.name,
+                      {"muted_until": until.isoformat(), "minutes": minutes})
     db.session.commit()
     return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
 
@@ -549,6 +606,8 @@ def mute_circuit(circuit_id):
 @circuits_bp.route("/<int:circuit_id>/unmute", methods=["POST"])
 @admin_required
 def unmute_circuit(circuit_id):
+    circuit = Circuit.query.get_or_404(circuit_id)
     AlertMute.query.filter_by(circuit_id=circuit_id).delete()
+    audit_log.record("unmute", "Circuit", circuit_id, circuit.name)
     db.session.commit()
     return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))

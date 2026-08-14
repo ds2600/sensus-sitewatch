@@ -10,7 +10,7 @@ load_dotenv()
 # SemVer. Bump on every user-facing release; GitHub Releases tags match
 # this (vX.Y.Z). Surfaced in the UI footer (see inject_app_name below) so
 # anyone looking at a running instance can tell what's actually deployed.
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 
 def create_app():
@@ -42,6 +42,7 @@ def create_app():
     from sitewatch.routes.settings import settings_bp
     from sitewatch.routes.api import api_bp
     from sitewatch.routes.regions import regions_bp
+    from sitewatch.routes.audit import audit_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -51,6 +52,7 @@ def create_app():
     app.register_blueprint(settings_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(regions_bp)
+    app.register_blueprint(audit_bp)
 
     # API docs (Swagger UI) — reads sitewatch/static/openapi.json, which
     # documents api_bp's endpoints by hand (kept in sync manually, same as
