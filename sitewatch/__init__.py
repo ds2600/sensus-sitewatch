@@ -10,7 +10,7 @@ load_dotenv()
 # SemVer. Bump on every user-facing release; GitHub Releases tags match
 # this (vX.Y.Z). Surfaced in the UI footer (see inject_app_name below) so
 # anyone looking at a running instance can tell what's actually deployed.
-__version__ = "0.12.0"
+__version__ = "0.12.1"
 
 
 def create_app():

@@ -17,7 +17,10 @@
 //     </table>
 //   </div>
 // A table with zero rows (empty state) is left alone. Every table starts
-// sorted ascending by its first sortable column.
+// sorted ascending by its first sortable column, UNLESS the container
+// carries data-default-sort="fieldname" (and optionally data-default-
+// sort-dir="desc", ascending otherwise) — e.g. a "Down since" history
+// table wants newest-first, not chronological-first.
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".datatable").forEach((container) => {
     const table = container.querySelector("table");
@@ -78,10 +81,12 @@ document.addEventListener("DOMContentLoaded", () => {
       list.show(1, size);
     });
 
-    // Default sort: first sortable column, ascending — every table starts
-    // in a predictable order instead of raw insertion order.
-    if (sortHeaders.length) {
-      list.sort(sortHeaders[0].dataset.sort, { order: "asc" });
+    // Default sort: first sortable column, ascending, unless overridden —
+    // every table starts in a predictable order instead of raw insertion
+    // order.
+    const defaultSortField = container.dataset.defaultSort || (sortHeaders[0] && sortHeaders[0].dataset.sort);
+    if (defaultSortField) {
+      list.sort(defaultSortField, { order: container.dataset.defaultSortDir || "asc" });
     }
   });
 });

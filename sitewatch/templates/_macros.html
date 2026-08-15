@@ -117,7 +117,7 @@
 {% if not history %}
 <p class="text-muted">No down history.</p>
 {% else %}
-<div class="datatable" id="{{ table_id }}" data-page-size="25">
+<div class="datatable" id="{{ table_id }}" data-page-size="25" data-default-sort="down_since" data-default-sort-dir="desc">
 <table class="table table-sm">
   <thead><tr>
     {% if show_circuit %}<th data-sort="circuit">Circuit</th>{% endif %}
