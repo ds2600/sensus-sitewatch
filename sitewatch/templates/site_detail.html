@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import breadcrumb, site_status_badge, circuit_status_badge, status_badge, passthrough_transit_table, circuit_history_table %}
+{% from "_macros.html" import breadcrumb, site_status_badge, circuit_status_badge, status_badge, passthrough_transit_table, circuit_history_table, custom_field_display %}
 {% block content %}
 {{ breadcrumb([("Sites", url_for('sites.list_sites')), (site.name, none)]) }}
 <div class="d-flex align-items-center gap-2">
@@ -22,6 +22,12 @@
   {% endif %}
 </p>
 {% endif %}
+
+{% if site.layer %}
+<p class="text-body-secondary small mt-2">Layer: {{ site.layer.name }}</p>
+{% endif %}
+
+{{ custom_field_display(custom_field_defs, custom_field_values) }}
 
 {% if site.site_type == 'passthrough' %}
 <p class="text-muted mt-4">Passthrough location — a map waypoint with no equipment installed.</p>

@@ -3,10 +3,10 @@ from flask_login import login_required
 
 from sitewatch.auth import admin_required
 from sitewatch.extensions import db
-from sitewatch.models import Site, Circuit, Region, SITE_TYPES, CircuitStatusHistory
+from sitewatch.models import Site, Circuit, Region, Layer, SITE_TYPES, CircuitStatusHistory
 from sitewatch.status import compute_site_status, site_degree_breakdown
 from sitewatch.csv_import import parse_csv, CsvImportError
-from sitewatch import audit_log
+from sitewatch import audit_log, custom_fields
 
 sites_bp = Blueprint("sites", __name__, url_prefix="/sites")
 
@@ -68,17 +68,22 @@ def add_site():
             site_type=site_type,
             parent_site_id=parent_site_id,
             region_id=request.form.get("region_id", type=int) or None,
+            layer_id=request.form.get("layer_id", type=int) or None,
             source="manual",
         )
         db.session.add(site)
         db.session.flush()
-        audit_log.record("create", "Site", site.id, site.name, {
+        details = {
             "lat": site.lat, "lon": site.lon, "site_type": site.site_type,
-            "parent_site_id": site.parent_site_id, "region_id": site.region_id,
-        })
+            "parent_site_id": site.parent_site_id, "region_id": site.region_id, "layer_id": site.layer_id,
+        }
+        details.update(custom_fields.set_values("site", site.id, request.form))
+        audit_log.record("create", "Site", site.id, site.name, details)
         db.session.commit()
         return redirect(url_for("sites.list_sites"))
     return render_template("site_form.html", site=None, regions=Region.query.order_by(Region.name).all(),
+                            layers=Layer.query.order_by(Layer.name).all(),
+                            custom_field_defs=custom_fields.definitions_for("site"), custom_field_values={},
                             major_sites=Site.query.filter_by(site_type="site").order_by(Site.name).all())
 
 
@@ -208,21 +213,26 @@ def edit_site(site_id):
             flash(error)
             return redirect(url_for("sites.edit_site", site_id=site_id))
         before = {"name": site.name, "lat": site.lat, "lon": site.lon, "site_type": site.site_type,
-                  "parent_site_id": site.parent_site_id, "region_id": site.region_id}
+                  "parent_site_id": site.parent_site_id, "region_id": site.region_id, "layer_id": site.layer_id}
         site.name = request.form["name"]
         site.lat = float(request.form["lat"])
         site.lon = float(request.form["lon"])
         site.site_type = site_type
         site.parent_site_id = parent_site_id
         site.region_id = request.form.get("region_id", type=int) or None
+        site.layer_id = request.form.get("layer_id", type=int) or None
         after = {"name": site.name, "lat": site.lat, "lon": site.lon, "site_type": site.site_type,
-                 "parent_site_id": site.parent_site_id, "region_id": site.region_id}
+                 "parent_site_id": site.parent_site_id, "region_id": site.region_id, "layer_id": site.layer_id}
         diff = audit_log.diff_fields(before, after)
+        diff.update(custom_fields.set_values("site", site.id, request.form))
         if diff:
             audit_log.record("update", "Site", site.id, site.name, diff)
         db.session.commit()
         return redirect(url_for("sites.site_detail", site_id=site.id))
     return render_template("site_form.html", site=site, regions=Region.query.order_by(Region.name).all(),
+                            layers=Layer.query.order_by(Layer.name).all(),
+                            custom_field_defs=custom_fields.definitions_for("site"),
+                            custom_field_values=custom_fields.values_for("site", site.id),
                             major_sites=Site.query.filter(Site.site_type == "site", Site.id != site.id)
                             .order_by(Site.name).all())
 
@@ -238,6 +248,7 @@ def delete_site(site_id):
         flash("Has minor sites assigned — remove or reassign them first.")
         return redirect(url_for("sites.site_detail", site_id=site_id))
     name = site.name
+    custom_fields.delete_values("site", site_id)
     db.session.delete(site)
     audit_log.record("delete", "Site", site_id, name)
     db.session.commit()
@@ -320,4 +331,6 @@ def site_detail(site_id):
         degree_breakdown=site_degree_breakdown(site),
         passthrough_transit=passthrough_transit,
         circuit_history=circuit_history,
+        custom_field_defs=custom_fields.definitions_for("site"),
+        custom_field_values=custom_fields.values_for("site", site.id),
     )

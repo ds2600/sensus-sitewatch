@@ -7,7 +7,10 @@ from flask_login import current_user
 
 from sitewatch.auth import admin_required
 from sitewatch.extensions import db
-from sitewatch.models import Setting, CircuitRole, Circuit, Region, Site, Device, User, USER_ROLES
+from sitewatch.models import (
+    Setting, CircuitRole, Circuit, Region, Site, Device, User, USER_ROLES,
+    Layer, CustomFieldDefinition, CustomFieldValue, CUSTOM_FIELD_OBJECT_TYPES,
+)
 from sitewatch.integrations import netbox
 from sitewatch.integrations.webhook_payload import send_down_alerts, send_test_alert
 from sitewatch.backup import export_data, import_data, BackupImportError, SCOPES
@@ -57,6 +60,10 @@ def index():
     unreachable_count = Device.query.filter_by(reachable=False).count()
     return render_template("settings.html", values=values, roles=CircuitRole.query.all(),
                             site_regions=Region.query.order_by(Region.name).all(),
+                            layers=Layer.query.order_by(Layer.name).all(),
+                            custom_fields=CustomFieldDefinition.query.order_by(
+                                CustomFieldDefinition.object_type, CustomFieldDefinition.name).all(),
+                            custom_field_object_types=CUSTOM_FIELD_OBJECT_TYPES,
                             poll_stats=poll_stats, poller_status=get_poller_status(),
                             unreachable_count=unreachable_count,
                             users=User.query.order_by(User.username).all(), user_roles=USER_ROLES)
@@ -246,6 +253,79 @@ def delete_site_region(region_id):
     name = region.name
     db.session.delete(region)
     audit_log.record("delete", "Region", region_id, name)
+    db.session.commit()
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/layers/add", methods=["POST"])
+@admin_required
+def add_layer():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Name a layer before adding it.")
+        return redirect(url_for("settings.index"))
+    if Layer.query.filter_by(name=name).first():
+        flash(f"A layer named '{name}' already exists.")
+        return redirect(url_for("settings.index"))
+    layer = Layer(name=name)
+    db.session.add(layer)
+    db.session.flush()
+    audit_log.record("create", "Layer", layer.id, layer.name)
+    db.session.commit()
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/layers/<int:layer_id>/delete", methods=["POST"])
+@admin_required
+def delete_layer(layer_id):
+    layer = Layer.query.get_or_404(layer_id)
+    in_use = (Site.query.filter_by(layer_id=layer.id).first()
+              or Device.query.filter_by(layer_id=layer.id).first()
+              or Circuit.query.filter_by(layer_id=layer.id).first())
+    if in_use:
+        flash(f"'{layer.name}' is in use by a site, device, or circuit — reassign them first.")
+        return redirect(url_for("settings.index"))
+    name = layer.name
+    db.session.delete(layer)
+    audit_log.record("delete", "Layer", layer_id, name)
+    db.session.commit()
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/custom-fields/add", methods=["POST"])
+@admin_required
+def add_custom_field():
+    name = request.form.get("name", "").strip()
+    object_type = request.form.get("object_type", "")
+    if not name or object_type not in CUSTOM_FIELD_OBJECT_TYPES:
+        flash("Name a field and pick what it applies to.")
+        return redirect(url_for("settings.index"))
+    if CustomFieldDefinition.query.filter_by(name=name, object_type=object_type).first():
+        flash(f"A {object_type} field named '{name}' already exists.")
+        return redirect(url_for("settings.index"))
+    field = CustomFieldDefinition(name=name, object_type=object_type)
+    db.session.add(field)
+    db.session.flush()
+    audit_log.record("create", "CustomFieldDefinition", field.id, field.name, {"object_type": field.object_type})
+    db.session.commit()
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/custom-fields/<int:field_id>/delete", methods=["POST"])
+@admin_required
+def delete_custom_field(field_id):
+    field = CustomFieldDefinition.query.get_or_404(field_id)
+    name, object_type = field.name, field.object_type
+    # Cascades its own values rather than blocking — unlike a CircuitRole
+    # (a circuit NEEDS a role, a broken reference is a real problem), a
+    # custom field's recorded values are optional annotation that becomes
+    # meaningless the moment the field defining them is gone. Forcing an
+    # admin to manually clear every value first would just be friction for
+    # what's meant to be a lightweight, flexible feature.
+    value_count = CustomFieldValue.query.filter_by(field_id=field.id).delete(synchronize_session=False)
+    db.session.delete(field)
+    audit_log.record("delete", "CustomFieldDefinition", field_id, name,
+                      {"object_type": object_type, "values_deleted": value_count})
     db.session.commit()
     return redirect(url_for("settings.index"))
 

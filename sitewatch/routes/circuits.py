@@ -5,11 +5,11 @@ from flask_login import login_required
 from sitewatch.auth import admin_required
 from sitewatch.extensions import db
 from sitewatch.models import (
-    Circuit, CircuitRole, CircuitWaypoint, Interface, Device, Site, AlertMute, Setting, CircuitStatusHistory,
+    Circuit, CircuitRole, CircuitWaypoint, Interface, Device, Site, Layer, AlertMute, Setting, CircuitStatusHistory,
 )
 from sitewatch.poller import poll_device_now
 from sitewatch.integrations.webhook_payload import send_down_alerts
-from sitewatch import job_log, cooldown, audit_log
+from sitewatch import job_log, cooldown, audit_log, custom_fields
 from sitewatch.csv_import import parse_csv, CsvImportError
 from sitewatch.utilization import circuit_utilization_history
 
@@ -46,6 +46,8 @@ def _form_options():
         "sites_for_form": [{"id": s.id, "label": s.name + (" (passthrough)" if s.site_type == "passthrough"
                             else " (minor)" if s.site_type == "minor" else "")}
                             for s in Site.query.all()],
+        "layers": Layer.query.order_by(Layer.name).all(),
+        "custom_field_defs": custom_fields.definitions_for("circuit"),
     }
 
 
@@ -174,6 +176,7 @@ def add_circuit():
             circuit.capacity_bps_override = int(f["capacity_override"])
         if f.get("utilization_threshold_pct"):
             circuit.utilization_threshold_pct = int(f["utilization_threshold_pct"])
+        circuit.layer_id = f.get("layer_id", type=int) or None
         # circuit.id must still be None here (add()/flush() happen after) —
         # that's what tells _set_waypoints this is a brand-new circuit with
         # no existing CircuitWaypoint rows to bulk-delete first.
@@ -186,9 +189,11 @@ def add_circuit():
             "lag_interface_a_id": circuit.lag_interface_a_id, "lag_interface_b_id": circuit.lag_interface_b_id,
             "capacity_bps_override": circuit.capacity_bps_override,
             "utilization_threshold_pct": circuit.utilization_threshold_pct,
+            "layer_id": circuit.layer_id,
         }
         if new_wp:
             details["waypoints"] = new_wp
+        details.update(custom_fields.set_values("circuit", circuit.id, f))
         audit_log.record("create", "Circuit", circuit.id, circuit.name, details)
         db.session.commit()
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit.id))
@@ -232,6 +237,7 @@ def add_circuit():
         duplicate_source=duplicate_source, existing_waypoints=existing_waypoints,
         prefill_device_a=prefill_device_a, prefill_device_b=prefill_device_b,
         prefill_lag_device_a=prefill_lag_device_a, prefill_lag_device_b=prefill_lag_device_b,
+        custom_field_values={},
         **_form_options(),
     )
 
@@ -416,7 +422,9 @@ def circuit_detail(circuit_id):
         if circuit.is_bundle else []
     )
     return render_template("circuit_detail.html", circuit=circuit, is_muted=is_muted,
-                            circuit_history=circuit_history, attachable_circuits=attachable_circuits)
+                            circuit_history=circuit_history, attachable_circuits=attachable_circuits,
+                            custom_field_defs=custom_fields.definitions_for("circuit"),
+                            custom_field_values=custom_fields.values_for("circuit", circuit.id))
 
 
 @circuits_bp.route("/<int:circuit_id>/utilization-history")
@@ -536,6 +544,7 @@ def edit_circuit(circuit_id):
             "capacity_bps_override": circuit.capacity_bps_override,
             "utilization_threshold_pct": circuit.utilization_threshold_pct,
             "lag_interface_a_id": circuit.lag_interface_a_id, "lag_interface_b_id": circuit.lag_interface_b_id,
+            "layer_id": circuit.layer_id,
         }
         circuit.name = f["name"]
         circuit.role_id = int(f["role_id"])
@@ -551,6 +560,7 @@ def edit_circuit(circuit_id):
         circuit.utilization_threshold_pct = (
             int(f["utilization_threshold_pct"]) if f.get("utilization_threshold_pct") else None
         )
+        circuit.layer_id = f.get("layer_id", type=int) or None
         if circuit.is_bundle:
             _set_lag_interfaces(circuit, f)
         old_wp, new_wp = _set_waypoints(circuit, f)
@@ -559,10 +569,12 @@ def edit_circuit(circuit_id):
             "capacity_bps_override": circuit.capacity_bps_override,
             "utilization_threshold_pct": circuit.utilization_threshold_pct,
             "lag_interface_a_id": circuit.lag_interface_a_id, "lag_interface_b_id": circuit.lag_interface_b_id,
+            "layer_id": circuit.layer_id,
         }
         diff = audit_log.diff_fields(before, after)
         if old_wp != new_wp:
             diff["waypoints"] = {"old": old_wp, "new": new_wp}
+        diff.update(custom_fields.set_values("circuit", circuit.id, f))
         if diff:
             audit_log.record("update", "Circuit", circuit.id, circuit.name, diff)
         db.session.commit()
@@ -575,6 +587,7 @@ def edit_circuit(circuit_id):
     return render_template(
         "circuit_form.html", circuit=circuit, existing_waypoints=existing_waypoints,
         devices_for_form=devices_for_form, interfaces_by_device=interfaces_by_device,
+        custom_field_values=custom_fields.values_for("circuit", circuit.id),
         **options,
     )
 
@@ -587,6 +600,7 @@ def delete_circuit(circuit_id):
         flash(f"Has {len(circuit.children)} member circuit(s) — reassign or delete those first.")
         return redirect(url_for("circuits.circuit_detail", circuit_id=circuit_id))
     name = circuit.name
+    custom_fields.delete_values("circuit", circuit_id)
     db.session.delete(circuit)
     audit_log.record("delete", "Circuit", circuit_id, name)
     db.session.commit()

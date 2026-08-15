@@ -5,10 +5,10 @@ from flask_login import login_required
 
 from sitewatch.auth import admin_required
 from sitewatch.extensions import db
-from sitewatch.models import Device, Site, Circuit, CircuitStatusHistory, VENDORS, SNMP_VERSIONS
+from sitewatch.models import Device, Site, Circuit, Layer, CircuitStatusHistory, VENDORS, SNMP_VERSIONS
 from sitewatch.discovery import perform_walk
 from sitewatch.poller import poll_device_now
-from sitewatch import job_log, cooldown, audit_log
+from sitewatch import job_log, cooldown, audit_log, custom_fields
 from sitewatch.csv_import import parse_csv, CsvImportError
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
@@ -64,20 +64,24 @@ def add_device():
         device = Device(
             site_id=site.id, hostname=f["hostname"], mgmt_ip=f["mgmt_ip"],
             vendor=f["vendor"], snmp_version=f["snmp_version"], source="manual",
+            layer_id=f.get("layer_id", type=int) or None,
         )
         _apply_credentials(device, f)
         db.session.add(device)
         db.session.flush()
         details = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
-                   "vendor": device.vendor, "snmp_version": device.snmp_version}
+                   "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id}
         if _credentials_touched(f):
             details["credentials_updated"] = True
+        details.update(custom_fields.set_values("device", device.id, f))
         audit_log.record("create", "Device", device.id, device.hostname, details)
         db.session.commit()
         return redirect(url_for("devices.device_detail", device_id=device.id))
     return render_template("device_form.html", device=None,
                             sites=Site.query.filter(Site.site_type.in_(["site", "minor"])).all(),
                             vendors=VENDORS, snmp_versions=SNMP_VERSIONS,
+                            layers=Layer.query.order_by(Layer.name).all(),
+                            custom_field_defs=custom_fields.definitions_for("device"), custom_field_values={},
                             preselected_site_id=request.args.get("site_id", type=int))
 
 
@@ -219,7 +223,9 @@ def device_detail(device_id):
 
     return render_template("device_detail.html", device=device,
                             circuits_by_interface_id=circuits_by_interface_id,
-                            circuit_history=circuit_history)
+                            circuit_history=circuit_history,
+                            custom_field_defs=custom_fields.definitions_for("device"),
+                            custom_field_values=custom_fields.values_for("device", device.id))
 
 
 @devices_bp.route("/<int:device_id>/edit", methods=["GET", "POST"])
@@ -233,25 +239,30 @@ def edit_device(device_id):
             flash("Passthrough sites can't have devices assigned.")
             return redirect(url_for("devices.edit_device", device_id=device_id))
         before = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
-                  "vendor": device.vendor, "snmp_version": device.snmp_version}
+                  "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id}
         device.site_id = site.id
         device.hostname = f["hostname"]
         device.mgmt_ip = f["mgmt_ip"]
         device.vendor = f["vendor"]
         device.snmp_version = f["snmp_version"]
+        device.layer_id = f.get("layer_id", type=int) or None
         _apply_credentials(device, f)
         after = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
-                 "vendor": device.vendor, "snmp_version": device.snmp_version}
+                 "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id}
         diff = audit_log.diff_fields(before, after)
         if _credentials_touched(f):
             diff["credentials_updated"] = True
+        diff.update(custom_fields.set_values("device", device.id, f))
         if diff:
             audit_log.record("update", "Device", device.id, device.hostname, diff)
         db.session.commit()
         return redirect(url_for("devices.device_detail", device_id=device.id))
     return render_template("device_form.html", device=device,
                             sites=Site.query.filter(Site.site_type.in_(["site", "minor"])).all(),
-                            vendors=VENDORS, snmp_versions=SNMP_VERSIONS)
+                            vendors=VENDORS, snmp_versions=SNMP_VERSIONS,
+                            layers=Layer.query.order_by(Layer.name).all(),
+                            custom_field_defs=custom_fields.definitions_for("device"),
+                            custom_field_values=custom_fields.values_for("device", device.id))
 
 
 @devices_bp.route("/<int:device_id>/delete", methods=["POST"])
@@ -266,6 +277,7 @@ def delete_device(device_id):
         flash(f"In use by circuit '{in_use.name}' — delete that first.")
         return redirect(url_for("devices.device_detail", device_id=device_id))
     hostname = device.hostname
+    custom_fields.delete_values("device", device_id)
     db.session.delete(device)  # interfaces cascade-delete automatically
     audit_log.record("delete", "Device", device_id, hostname)
     db.session.commit()

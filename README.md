@@ -266,6 +266,8 @@ color:
 | CHI-DEN-Office-Backup circuit: gray | Tagged admin-down — excluded from status math entirely |
 | Rocky Mountain Relay (passthrough site): "Circuits passing through" shows CHI-DEN-Core | The bundle is waypointed through it — demonstrates the map line bending through a passthrough site and that site's own transit list |
 | Chicago Annex: "Circuits passing through" shows CHI-AUS-Core | CHI-AUS-Core is waypointed through Chicago Annex too — demonstrates a major/minor site's own transit list, not just a passthrough site's |
+| Dashboard "Layer" dropdown shows "West Ops" | Austin DC's whole site/device/circuit trio is tagged to it — selecting it shows Austin plus everything untagged, hiding nothing else since there's only one layer defined; demonstrates the map-visibility filter (Settings -> Layers) without touching status/polling/alerting |
+| Chicago DC / chi-core-01 / DEN-PHX-Core detail pages show a "Custom fields" section | One field per object type (Site Owner/Asset Tag/Client), one value each — demonstrates Settings -> Custom fields |
 | One core bundle member: high but not alarming utilization | Demonstrates the utilization numbers on the device detail page without needing real traffic |
 
 `SITEWATCH_SIMULATE=1` must be set for both `seed-demo` and `flask run` —

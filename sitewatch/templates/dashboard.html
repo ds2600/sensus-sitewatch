@@ -10,6 +10,16 @@
     {% endfor %}
   </select>
   <a href="{{ url_for('regions.manage_regions') }}" class="btn btn-outline-secondary btn-sm">Manage map views</a>
+  {% if layers %}
+  <label class="form-label mb-0 ms-3" for="layer_select">Layer</label>
+  <select class="form-select form-select-sm w-auto" id="layer_select"
+          onchange="window.location = '{{ url_for('dashboard.index') }}' + (this.value ? '?layer_id=' + this.value : '');">
+    <option value="" {{ 'selected' if not selected_layer_id }}>All</option>
+    {% for l in layers %}
+    <option value="{{ l.id }}" {{ 'selected' if selected_layer_id == l.id }}>{{ l.name }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
   <button type="button" id="auto-refresh-toggle" class="btn btn-outline-secondary btn-sm ms-auto">Auto-refresh: Off</button>
 </div>
 <div id="map" class="mb-4 rounded border"></div>

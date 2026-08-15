@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import breadcrumb %}
+{% from "_macros.html" import breadcrumb, custom_field_inputs %}
 {% block content %}
 {% set prefill = circuit or duplicate_source %}
 {% set effective_parent_id_bc = circuit.parent_circuit_id if circuit else preselected_parent_id %}
@@ -127,6 +127,16 @@
     <div class="form-text">Not monitored yet — reserved for an upcoming utilization-alerting feature.</div>
   </div>
 
+  <div class="mb-3"><label class="form-label">Layer</label>
+    <select class="form-select" style="max-width:16rem" name="layer_id">
+      <option value="">&mdash; none &mdash;</option>
+      {% for l in layers %}
+      <option value="{{ l.id }}" {{ 'selected' if prefill and prefill.layer_id == l.id }}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Controls dashboard map visibility. None = visible on every layer. <a href="{{ url_for('settings.index') }}#layers">Manage layers</a>.</div>
+  </div>
+
   <div class="mb-3">
     <label class="form-label">Waypoints</label>
     <div class="form-text mt-0 mb-2">Cosmetic — bends the map line. Drag to reorder.</div>
@@ -143,6 +153,7 @@
     <script id="existing-waypoints-data" type="application/json">{{ (existing_waypoints or []) | tojson }}</script>
   </div>
 
+  {{ custom_field_inputs(custom_field_defs, custom_field_values) }}
   <button class="btn btn-primary">Save</button>
 </form>
 {% endblock %}

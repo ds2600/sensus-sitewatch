@@ -33,13 +33,28 @@ MapRegion (a saved map camera position, no site membership; UI-labeled
 "map view" to avoid the collision). Region rides inside the "sites" scope
 (like circuit_roles rides inside "circuits") since it's owned by sites the
 same way; the "regions" scope here is MapRegion only.
+
+Layer (dashboard-map visibility tag) is referenced by Site, Device, AND
+Circuit — unlike Region/circuit_roles, which are each owned by exactly one
+scope. It rides in the "sites" scope only (first in the documented import
+order below), same convention as Device.site_id: a devices- or circuits-
+only restore into an empty database can still reference a layer_id that
+doesn't resolve to anything until a "sites" (or "all") import also brings
+the matching Layer row in — not a new problem, the same accepted contract
+Device.site_id already has.
+
+CustomFieldDefinition/CustomFieldValue are the opposite case — a
+definition's object_type ties it to exactly one scope (a "site" field is
+only ever referenced by Site-object CustomFieldValue rows), so each rides
+entirely inside its own object type's scope, self-contained, same as
+circuit_roles.
 """
 from datetime import datetime
 
 from sitewatch.extensions import db
 from sitewatch.models import (
-    Site, Device, Interface, CircuitRole, Circuit, CircuitWaypoint, MapRegion, Region, Setting,
-    CircuitStatusHistory, AlertMute, UtilizationRollup,
+    Site, Device, Interface, CircuitRole, Circuit, CircuitWaypoint, MapRegion, Region, Layer, Setting,
+    CircuitStatusHistory, AlertMute, UtilizationRollup, CustomFieldDefinition, CustomFieldValue,
 )
 
 FORMAT = "sitewatch-backup"
@@ -59,7 +74,9 @@ _SCOPE_KEYS = {
 # first backup format. "regions" is a newer, optional addition — an export
 # from before MapRegion existed simply won't have it, and that must not be
 # an import error (see CLAUDE.md's backup-compatibility rule; _load_regions
-# already tolerates a missing key via .get("regions", [])).
+# already tolerates a missing key via .get("regions", [])). Same story for
+# "layers"/"custom_field_definitions"/"custom_field_values", newer still —
+# every _load_* below reads them via .get(..., []).
 _SCOPE_KEYS["all"] = {"sites", "devices", "interfaces", "circuit_roles", "circuits", "settings"}
 
 
@@ -67,22 +84,44 @@ class BackupImportError(Exception):
     pass
 
 
+def _export_custom_fields(object_type):
+    """CustomFieldDefinition/Value for one object type — self-contained,
+    since a definition's object_type ties it to exactly one scope (see
+    module docstring). Keys are prefixed per object type so a scope="all"
+    export (which merges every _export_* dict into one payload) doesn't
+    have sites/devices/circuits custom fields overwrite each other."""
+    defs = CustomFieldDefinition.query.filter_by(object_type=object_type).all()
+    def_ids = [d.id for d in defs]
+    values = CustomFieldValue.query.filter(CustomFieldValue.field_id.in_(def_ids)).all() if def_ids else []
+    return (
+        [{"id": d.id, "name": d.name} for d in defs],
+        [{"field_id": v.field_id, "object_id": v.object_id, "value": v.value} for v in values],
+    )
+
+
 def _export_sites():
+    field_defs, field_values = _export_custom_fields("site")
     return {
         "sites": [
             {"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
              "site_type": s.site_type, "parent_site_id": s.parent_site_id,
-             "region_id": s.region_id, "netbox_id": s.netbox_id, "source": s.source}
+             "region_id": s.region_id, "layer_id": s.layer_id,
+             "netbox_id": s.netbox_id, "source": s.source}
             for s in Site.query.all()
         ],
         # Region (site grouping, not MapRegion) is owned by sites the same
         # way circuit_roles is owned by circuits — exported alongside so a
         # sites-only restore doesn't leave region_id pointing at nothing.
         "site_regions": [{"id": r.id, "name": r.name} for r in Region.query.all()],
+        # Layer rides here, not its own scope — see module docstring for why.
+        "layers": [{"id": l.id, "name": l.name} for l in Layer.query.all()],
+        "site_custom_field_definitions": field_defs,
+        "site_custom_field_values": field_values,
     }
 
 
 def _export_devices():
+    field_defs, field_values = _export_custom_fields("device")
     return {
         "devices": [
             {
@@ -93,7 +132,7 @@ def _export_devices():
                 "snmpv3_auth_protocol": d.snmpv3_auth_protocol,
                 "snmpv3_priv_protocol": d.snmpv3_priv_protocol,
                 "ssh_username": d.ssh_username,
-                "netbox_id": d.netbox_id, "source": d.source,
+                "netbox_id": d.netbox_id, "source": d.source, "layer_id": d.layer_id,
             }
             for d in Device.query.all()
         ],
@@ -108,10 +147,13 @@ def _export_devices():
             }
             for i in Interface.query.all()
         ],
+        "device_custom_field_definitions": field_defs,
+        "device_custom_field_values": field_values,
     }
 
 
 def _export_circuits():
+    field_defs, field_values = _export_custom_fields("circuit")
     return {
         "circuit_roles": [{"id": r.id, "name": r.name, "tier": r.tier} for r in CircuitRole.query.all()],
         "circuits": [
@@ -123,10 +165,13 @@ def _export_circuits():
                 "lag_interface_a_id": c.lag_interface_a_id,
                 "lag_interface_b_id": c.lag_interface_b_id,
                 "capacity_bps_override": c.capacity_bps_override,
+                "layer_id": c.layer_id,
                 "waypoints": [{"site_id": w.site_id, "position": w.position} for w in c.waypoints],
             }
             for c in Circuit.query.all()
         ],
+        "circuit_custom_field_definitions": field_defs,
+        "circuit_custom_field_values": field_values,
     }
 
 
@@ -179,14 +224,24 @@ def _validate(data, expected_scope):
         raise BackupImportError("File doesn't look like a Sensus SiteWatch backup (missing expected sections).")
 
 
+def _wipe_custom_fields(object_type):
+    def_ids = [d.id for d in CustomFieldDefinition.query.filter_by(object_type=object_type).all()]
+    if def_ids:
+        CustomFieldValue.query.filter(CustomFieldValue.field_id.in_(def_ids)).delete(synchronize_session=False)
+    CustomFieldDefinition.query.filter_by(object_type=object_type).delete()
+
+
 def _wipe_sites():
     Site.query.delete()
     Region.query.delete()
+    Layer.query.delete()
+    _wipe_custom_fields("site")
 
 
 def _wipe_devices():
     Interface.query.delete()
     Device.query.delete()
+    _wipe_custom_fields("device")
 
 
 def _wipe_circuits():
@@ -195,25 +250,38 @@ def _wipe_circuits():
     CircuitWaypoint.query.delete()
     Circuit.query.delete()
     CircuitRole.query.delete()
+    _wipe_custom_fields("circuit")
 
 
 def _wipe_regions():
     MapRegion.query.delete()
 
 
+def _load_custom_fields(data, object_type, def_key, value_key):
+    for d in data.get(def_key, []):
+        db.session.add(CustomFieldDefinition(id=d["id"], name=d["name"], object_type=object_type))
+    for v in data.get(value_key, []):
+        db.session.add(CustomFieldValue(field_id=v["field_id"], object_id=v["object_id"], value=v.get("value")))
+
+
 def _load_sites(data):
-    # Regions first — sites below may reference them via region_id.
+    # Regions and layers first — sites below may reference them via
+    # region_id/layer_id.
     for r in data.get("site_regions", []):
         db.session.add(Region(id=r["id"], name=r["name"]))
+    for l in data.get("layers", []):
+        db.session.add(Layer(id=l["id"], name=l["name"]))
     for s in data["sites"]:
         db.session.add(Site(
             id=s["id"], name=s["name"], lat=s["lat"], lon=s["lon"],
             site_type=s.get("site_type", "site"),
             parent_site_id=s.get("parent_site_id"),
             region_id=s.get("region_id"),
+            layer_id=s.get("layer_id"),
             netbox_id=s.get("netbox_id"), source=s.get("source", "manual"),
             out_of_sync=False,
         ))
+    _load_custom_fields(data, "site", "site_custom_field_definitions", "site_custom_field_values")
 
 
 def _load_devices(data):
@@ -227,6 +295,7 @@ def _load_devices(data):
             snmpv3_priv_protocol=d.get("snmpv3_priv_protocol"),
             ssh_username=d.get("ssh_username"),
             netbox_id=d.get("netbox_id"), source=d.get("source", "manual"),
+            layer_id=d.get("layer_id"),
             out_of_sync=False, reachable=True,
         ))
     for i in data["interfaces"]:
@@ -235,6 +304,7 @@ def _load_devices(data):
             if_descr=i.get("if_descr"), if_alias=i.get("if_alias"),
             if_speed_bps=i.get("if_speed_bps"),
         ))
+    _load_custom_fields(data, "device", "device_custom_field_definitions", "device_custom_field_values")
 
 
 def _load_circuits(data):
@@ -252,9 +322,11 @@ def _load_circuits(data):
             lag_interface_a_id=c.get("lag_interface_a_id"),
             lag_interface_b_id=c.get("lag_interface_b_id"),
             capacity_bps_override=c.get("capacity_bps_override"),
+            layer_id=c.get("layer_id"),
         ))
         for w in c.get("waypoints", []):
             db.session.add(CircuitWaypoint(circuit_id=c["id"], site_id=w["site_id"], position=w["position"]))
+    _load_custom_fields(data, "circuit", "circuit_custom_field_definitions", "circuit_custom_field_values")
 
 
 def _load_regions(data):

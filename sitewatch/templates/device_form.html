@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import breadcrumb %}
+{% from "_macros.html" import breadcrumb, custom_field_inputs %}
 {% block content %}
 {% set effective_site_id = device.site_id if device else preselected_site_id %}
 {% set effective_site = (sites | selectattr('id', 'equalto', effective_site_id) | first) if effective_site_id else none %}
@@ -19,6 +19,15 @@
     <select class="form-select" name="vendor">
       {% for v in vendors %}<option value="{{ v }}" {{ 'selected' if device and device.vendor==v }}>{{ v }}</option>{% endfor %}
     </select>
+  </div>
+  <div class="mb-3"><label class="form-label">Layer</label>
+    <select class="form-select" name="layer_id">
+      <option value="">&mdash; none &mdash;</option>
+      {% for l in layers %}
+      <option value="{{ l.id }}" {{ 'selected' if device and device.layer_id == l.id }}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Controls dashboard map visibility. None = visible on every layer. <a href="{{ url_for('settings.index') }}#layers">Manage layers</a>.</div>
   </div>
   <div class="mb-3"><label class="form-label">SNMP version</label>
     <select class="form-select" name="snmp_version" onchange="toggleSnmpFields(this.value)" id="snmp_version_select">
@@ -51,6 +60,7 @@
     <div class="mb-3"><label class="form-label">Priv key</label><input class="form-control" name="snmpv3_priv_key" placeholder="{{ '(unchanged)' if device else '' }}"></div>
   </div>
 
+  {{ custom_field_inputs(custom_field_defs, custom_field_values) }}
   <button class="btn btn-primary">Save</button>
 </form>
 {% endblock %}

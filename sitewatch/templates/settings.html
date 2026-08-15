@@ -22,6 +22,12 @@
     <button class="nav-link" id="roles-tab" data-bs-toggle="tab" data-bs-target="#roles" type="button" role="tab">Circuit roles</button>
   </li>
   <li class="nav-item" role="presentation">
+    <button class="nav-link" id="layers-tab" data-bs-toggle="tab" data-bs-target="#layers" type="button" role="tab">Layers</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="custom-fields-tab" data-bs-toggle="tab" data-bs-target="#custom-fields" type="button" role="tab">Custom fields</button>
+  </li>
+  <li class="nav-item" role="presentation">
     <button class="nav-link" id="netbox-tab" data-bs-toggle="tab" data-bs-target="#netbox" type="button" role="tab">NetBox</button>
   </li>
   <li class="nav-item" role="presentation">
@@ -192,6 +198,74 @@
         <input class="form-control" name="name" placeholder="Role name" required>
         <select class="form-select" name="tier"><option value="critical">critical</option><option value="auxiliary">auxiliary</option></select>
         <button class="btn btn-outline-primary">Add role</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="layers" role="tabpanel">
+    <div class="mt-3">
+      <p class="text-body-secondary small">
+        Controls what shows on the dashboard map when a layer is selected. A site/device/circuit with no layer set
+        is visible on every layer view; one tagged to a layer is visible only there. Doesn't affect polling,
+        status, or alerting — those stay on for everything regardless of layer.
+      </p>
+      <table class="table table-sm col-md-6">
+        <thead><tr><th>Name</th><th></th></tr></thead>
+        <tbody>
+          {% for l in layers %}
+          <tr>
+            <td>{{ l.name }}</td>
+            <td>
+              <form method="post" action="{{ url_for('settings.delete_layer', layer_id=l.id) }}"
+                    onsubmit="return confirm('Delete layer {{ l.name }}?');">
+                <button class="btn btn-outline-danger btn-sm">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="2" class="text-muted">None yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <form method="post" action="{{ url_for('settings.add_layer') }}" class="d-flex gap-2 col-md-6">
+        <input class="form-control" name="name" placeholder="Layer name" required>
+        <button class="btn btn-outline-primary">Add layer</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="custom-fields" role="tabpanel">
+    <div class="mt-3">
+      <p class="text-body-secondary small">
+        Extra text fields on Sites, Devices, or Circuits — shown on that object's add/edit form and detail page.
+      </p>
+      <table class="table table-sm col-md-8">
+        <thead><tr><th>Name</th><th>Applies to</th><th></th></tr></thead>
+        <tbody>
+          {% for f in custom_fields %}
+          <tr>
+            <td>{{ f.name }}</td>
+            <td>{{ f.object_type }}</td>
+            <td>
+              <form method="post" action="{{ url_for('settings.delete_custom_field', field_id=f.id) }}"
+                    onsubmit="return confirm('Delete field {{ f.name }}? Any values already set on {{ f.object_type }}s are deleted too.');">
+                <button class="btn btn-outline-danger btn-sm">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="text-muted">None yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <form method="post" action="{{ url_for('settings.add_custom_field') }}" class="d-flex gap-2 col-md-8">
+        <input class="form-control" name="name" placeholder="Field name" required>
+        <select class="form-select" name="object_type">
+          {% for t in custom_field_object_types %}
+          <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-outline-primary text-nowrap">Add field</button>
       </form>
     </div>
   </div>

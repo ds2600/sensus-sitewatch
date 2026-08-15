@@ -152,3 +152,35 @@
 </div>
 {% endif %}
 {% endmacro %}
+
+{# Custom fields (Settings -> Custom fields): shared by site_form.html,
+   device_form.html, and circuit_form.html. defs is that object type's
+   list of CustomFieldDefinition (routes already scope it to the right
+   type via custom_fields.definitions_for()); values is {field_id: value},
+   empty for a brand-new object. Inputs are named custom_field_<id> —
+   custom_fields.py's set_values() reads that exact naming convention, so
+   don't rename it without updating that too. Text-only by design, no
+   other field kinds yet. #}
+{% macro custom_field_inputs(defs, values) %}
+{% for d in defs %}
+<div class="mb-3"><label class="form-label">{{ d.name }}</label>
+  <input class="form-control" name="custom_field_{{ d.id }}" value="{{ values.get(d.id, '') }}"></div>
+{% endfor %}
+{% endmacro %}
+
+{# Read-only counterpart for a detail page — same defs/values shape.
+   Renders nothing at all if this object type has no custom fields
+   defined, so pages for object types nobody's added fields to stay
+   unchanged. #}
+{% macro custom_field_display(defs, values) %}
+{% if defs %}
+<h5 class="mt-4">Custom fields</h5>
+<table class="table table-sm col-md-6">
+  <tbody>
+    {% for d in defs %}
+    <tr><td>{{ d.name }}</td><td>{{ values.get(d.id) or '—' }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endmacro %}

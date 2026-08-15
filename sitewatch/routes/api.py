@@ -26,11 +26,25 @@ def _util_pct(circuit):
 @api_bp.route("/map")
 @login_required
 def map_data():
+    # Layer is purely a map-visibility filter (Settings -> Layers) — it
+    # never touches polling/status/alerting, which stay computed and
+    # running against everything regardless of what's selected here.
+    # Untagged (layer_id is None) sites/circuits are shared/core
+    # infrastructure and show up on every layer view; a tagged one shows
+    # up only on its own. No filter at all (layer_id absent/0) means "All".
+    layer_id = request.args.get("layer_id", type=int)
+
+    site_query = Site.query
+    circuit_query = Circuit.query.filter_by(parent_circuit_id=None)
+    if layer_id:
+        site_query = site_query.filter(or_(Site.layer_id.is_(None), Site.layer_id == layer_id))
+        circuit_query = circuit_query.filter(or_(Circuit.layer_id.is_(None), Circuit.layer_id == layer_id))
+
     sites = [{"id": s.id, "name": s.name, "lat": s.lat, "lon": s.lon,
-              "status": compute_site_status(s), "site_type": s.site_type} for s in Site.query.all()]
+              "status": compute_site_status(s), "site_type": s.site_type} for s in site_query.all()]
 
     lines = []
-    for c in Circuit.query.filter_by(parent_circuit_id=None).all():
+    for c in circuit_query.all():
         if c.is_intra_site:
             continue  # intra-site circuits render in the site detail panel, not the map
         a, b = c.site_a, c.site_b

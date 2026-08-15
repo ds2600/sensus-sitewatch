@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import breadcrumb, status_badge, circuit_history_table %}
+{% from "_macros.html" import breadcrumb, status_badge, circuit_history_table, custom_field_display %}
 {% block content %}
 {{ breadcrumb([("Sites", url_for('sites.list_sites')), (device.site.name, url_for('sites.site_detail', site_id=device.site_id)), (device.hostname, none)]) }}
 <div class="d-flex align-items-center gap-2">
@@ -18,7 +18,9 @@
   Reachable: {{ status_badge('up' if device.reachable else 'unreachable') }} |
   Last polled: {{ device.last_polled_at or 'never' }} |
   Last walked: {{ device.last_walked_at or 'never' }}
+  {% if device.layer %}| Layer: {{ device.layer.name }}{% endif %}
 </p>
+{{ custom_field_display(custom_field_defs, custom_field_values) }}
 {% if current_user.is_admin %}
 <div class="mb-3">
   <button type="button" class="btn btn-outline-primary" data-job-url="{{ url_for('devices.repoll_device', device_id=device.id) }}"

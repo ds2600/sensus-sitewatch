@@ -5,24 +5,48 @@ object has a real id, but never commits — callers/fixtures own the
 transaction boundary.
 """
 from sitewatch.extensions import db
-from sitewatch.models import Site, Device, Interface, CircuitRole, Circuit
+from sitewatch.models import Site, Device, Interface, CircuitRole, Circuit, Layer, CustomFieldDefinition
 
 _lat = [40.0]  # cheap incrementing coordinate so sites never collide
 
 
-def make_site(name="Test Site", site_type="site", parent_site=None, reachable_devices=True):
+def make_site(name="Test Site", site_type="site", parent_site=None, reachable_devices=True, layer=None):
     _lat[0] += 0.1
     site = Site(name=name, lat=_lat[0], lon=-90.0, site_type=site_type,
-                parent_site_id=parent_site.id if parent_site else None)
+                parent_site_id=parent_site.id if parent_site else None,
+                layer_id=layer.id if layer else None)
     db.session.add(site)
     db.session.flush()
     return site
 
 
-def make_device(site, hostname=None, reachable=True):
+_layer_seq = [0]
+
+
+def make_layer(name=None):
+    _layer_seq[0] += 1
+    layer = Layer(name=name or f"layer-{_layer_seq[0]}")
+    db.session.add(layer)
+    db.session.flush()
+    return layer
+
+
+_field_seq = [0]
+
+
+def make_custom_field(object_type, name=None):
+    _field_seq[0] += 1
+    field = CustomFieldDefinition(name=name or f"field-{_field_seq[0]}", object_type=object_type)
+    db.session.add(field)
+    db.session.flush()
+    return field
+
+
+def make_device(site, hostname=None, reachable=True, layer=None):
     hostname = hostname or f"{site.name.lower().replace(' ', '-')}-dev"
     device = Device(site_id=site.id, hostname=hostname, mgmt_ip="10.0.0.1",
-                     vendor="ios-xe", snmp_version="v2c", reachable=reachable)
+                     vendor="ios-xe", snmp_version="v2c", reachable=reachable,
+                     layer_id=layer.id if layer else None)
     db.session.add(device)
     db.session.flush()
     return device
@@ -52,12 +76,13 @@ def make_role(name=None, tier="critical"):
     return role
 
 
-def make_circuit(interface_a, interface_b, role=None, current_state="up", name=None, parent=None):
+def make_circuit(interface_a, interface_b, role=None, current_state="up", name=None, parent=None, layer=None):
     role = role or make_role()
     circuit = Circuit(
         name=name or f"{interface_a.device.hostname}-{interface_b.device.hostname}",
         role_id=role.id, interface_a_id=interface_a.id, interface_b_id=interface_b.id,
         current_state=current_state, parent_circuit_id=parent.id if parent else None,
+        layer_id=layer.id if layer else None,
     )
     db.session.add(circuit)
     db.session.flush()

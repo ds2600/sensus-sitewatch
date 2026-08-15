@@ -29,6 +29,14 @@ Scenarios scripted here (see simulator.py for what each tag does):
     site's own status is computed independently of its parent, and that
     the parent cascade only forces red for a red/blue parent, never a
     merely-yellow one (see status.py's compute_site_status).
+  - Layer "West Ops": tags Austin DC's site/device/circuit trio — the
+    dashboard's Layer dropdown then shows/hides Austin's marker and line
+    together depending on what's selected, demonstrating that a layer is
+    a pure map-visibility filter (status/polling/alerting are unaffected).
+  - Custom fields: one definition per object type (Site Owner/Asset Tag/
+    Client), one value set each (Chicago DC / chi-core-01 / DEN-PHX-Core)
+    — Settings -> Custom fields and the relevant detail pages all have
+    something real to show.
 
 Runs several real poll cycles at the end (see _drive_poll_cycles below) so
 the map/dashboard show correct states the moment you load them — you don't
@@ -37,7 +45,10 @@ though you do need it if you want states to keep updating live afterward.
 """
 from datetime import timedelta
 from sitewatch.extensions import db
-from sitewatch.models import Site, Device, Circuit, CircuitRole, Interface, Setting, CircuitWaypoint
+from sitewatch.models import (
+    Site, Device, Circuit, CircuitRole, Interface, Setting, CircuitWaypoint,
+    Layer, CustomFieldDefinition, CustomFieldValue,
+)
 from sitewatch.discovery import perform_walk
 
 
@@ -152,9 +163,33 @@ def run():
     # this circuit reads unreachable regardless of any tag on its interfaces
     # — shown on the map as a blue line, not just a blue dot with nothing
     # connecting to it.
-    db.session.add(Circuit(name="DEN-PHX-Core", role_id=core_role.id,
-                            interface_a_id=_iface(den_core, "GigabitEthernet0/0/3").id,
-                            interface_b_id=_iface(phx_core, "GigabitEthernet0/0/1").id))
+    circuit_den_phx = Circuit(name="DEN-PHX-Core", role_id=core_role.id,
+                               interface_a_id=_iface(den_core, "GigabitEthernet0/0/3").id,
+                               interface_b_id=_iface(phx_core, "GigabitEthernet0/0/1").id)
+    db.session.add(circuit_den_phx)
+
+    # Layer demo: tags Austin DC's whole trio (site/device/circuit) into a
+    # "West Ops" layer — the dashboard's Layer dropdown then shows Austin
+    # under "West Ops" or "All", but Austin drops out under any OTHER
+    # layer someone adds later, same as everything untagged always would.
+    west_ops = Layer(name="West Ops")
+    db.session.add(west_ops)
+    db.session.flush()
+    austin.layer_id = west_ops.id
+    aus_core.layer_id = west_ops.id
+    chi_aus_core.layer_id = west_ops.id
+
+    # Custom fields demo: one per object type, one value set each, so
+    # Settings -> Custom fields and the relevant add/edit forms/detail
+    # pages all have something real to show.
+    site_owner_field = CustomFieldDefinition(name="Site Owner", object_type="site")
+    asset_tag_field = CustomFieldDefinition(name="Asset Tag", object_type="device")
+    client_field = CustomFieldDefinition(name="Client", object_type="circuit")
+    db.session.add_all([site_owner_field, asset_tag_field, client_field])
+    db.session.flush()
+    db.session.add(CustomFieldValue(field_id=site_owner_field.id, object_id=chicago.id, value="NOC Team"))
+    db.session.add(CustomFieldValue(field_id=asset_tag_field.id, object_id=chi_core.id, value="AT-10042"))
+    db.session.add(CustomFieldValue(field_id=client_field.id, object_id=circuit_den_phx.id, value="Acme Corp"))
 
     db.session.commit()
     _drive_poll_cycles()

@@ -128,7 +128,12 @@ async function loadMap() {
     map.invalidateSize();
   });
 
-  const res = await fetch("/api/map");
+  // Layer filtering (Settings -> Layers) is a plain GET query param, read
+  // straight off the current URL — dashboard.html's layer selector reloads
+  // the page with ?layer_id=N rather than re-fetching in place, same
+  // pattern as the region filter on the Sites list.
+  const layerId = new URLSearchParams(window.location.search).get("layer_id");
+  const res = await fetch("/api/map" + (layerId ? `?layer_id=${layerId}` : ""));
   const data = await res.json();
 
   // Frame the view around however spread out the sites actually are — tight

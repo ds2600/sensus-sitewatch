@@ -15,6 +15,7 @@ CIRCUIT_TIERS = ("critical", "auxiliary")
 CIRCUIT_STATES = ("up", "degraded", "down", "admin_down", "unreachable")
 SITE_TYPES = ("site", "passthrough", "minor")
 USER_ROLES = ("admin", "read_only")
+CUSTOM_FIELD_OBJECT_TYPES = ("site", "device", "circuit")
 
 
 class User(UserMixin, db.Model):
@@ -96,6 +97,22 @@ class Region(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class Layer(db.Model):
+    """Map-visibility tag, independently settable on Site, Device, and
+    Circuit — deliberately its own concept, not reusing Region (which is
+    Site-only and organizational/geographic, e.g. "sorting/filtering the
+    Sites list"). A Layer controls what shows up on the dashboard map when
+    that layer is selected: something with no layer_id set is visible on
+    EVERY layer view (shared/core infrastructure); something tagged to a
+    specific layer is visible only there. Doesn't touch polling, status,
+    alerting, or incidents at all — those stay global regardless of which
+    layer anyone has selected (see api.py's map_data() for the one place
+    this actually gets read)."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Site(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -110,6 +127,7 @@ class Site(db.Model):
     # (status.py) safely bounded to a single hop.
     parent_site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)
     region_id = db.Column(db.Integer, db.ForeignKey("region.id"), nullable=True)
+    layer_id = db.Column(db.Integer, db.ForeignKey("layer.id"), nullable=True)
     netbox_id = db.Column(db.Integer, nullable=True)
     source = db.Column(db.String(20), default="manual")
     out_of_sync = db.Column(db.Boolean, default=False)
@@ -117,6 +135,7 @@ class Site(db.Model):
 
     devices = db.relationship("Device", backref="site", lazy=True)
     region = db.relationship("Region", backref="sites")
+    layer = db.relationship("Layer", backref="sites", foreign_keys=[layer_id])
     minor_sites = db.relationship("Site", backref=db.backref("parent_site", remote_side=[id]), lazy=True)
 
 
@@ -141,6 +160,7 @@ class Device(db.Model):
     netbox_id = db.Column(db.Integer, nullable=True)
     source = db.Column(db.String(20), default="manual")
     out_of_sync = db.Column(db.Boolean, default=False)
+    layer_id = db.Column(db.Integer, db.ForeignKey("layer.id"), nullable=True)
 
     reachable = db.Column(db.Boolean, default=True)
     last_walked_at = db.Column(db.DateTime, nullable=True)
@@ -149,6 +169,7 @@ class Device(db.Model):
 
     interfaces = db.relationship("Interface", backref="device", lazy=True,
                                   cascade="all, delete-orphan")
+    layer = db.relationship("Layer", backref="devices", foreign_keys=[layer_id])
 
     # --- credential helpers: callers never touch *_enc columns directly ---
     @property
@@ -240,6 +261,7 @@ class Circuit(db.Model):
     lag_interface_b_id = db.Column(db.Integer, db.ForeignKey("interface.id"), nullable=True)
 
     capacity_bps_override = db.Column(db.BigInteger, nullable=True)
+    layer_id = db.Column(db.Integer, db.ForeignKey("layer.id"), nullable=True)
 
     # Null = not monitored for utilization. Not acted on yet (no incident
     # gets raised when crossed) — settable now so it's ready for that once
@@ -255,6 +277,7 @@ class Circuit(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     role = db.relationship("CircuitRole")
+    layer = db.relationship("Layer", backref="circuits", foreign_keys=[layer_id])
     interface_a = db.relationship("Interface", foreign_keys=[interface_a_id])
     interface_b = db.relationship("Interface", foreign_keys=[interface_b_id])
     lag_interface_a = db.relationship("Interface", foreign_keys=[lag_interface_a_id])
@@ -526,4 +549,40 @@ class AuditLog(db.Model):
 
     __table_args__ = (
         db.Index("ix_audit_log_object", "object_type", "object_id"),
+    )
+
+
+class CustomFieldDefinition(db.Model):
+    """Admin-defined, per-object-type extra field (Settings -> Custom
+    Fields). object_type is which of Site/Device/Circuit it applies to —
+    a field defined for one type never shows up on another's form. Values
+    are text-only by design (see CustomFieldValue) — no typed/validated
+    field kinds yet."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), nullable=False)
+    object_type = db.Column(db.String(20), nullable=False)  # site | device | circuit — see CUSTOM_FIELD_OBJECT_TYPES
+
+    __table_args__ = (
+        db.UniqueConstraint("name", "object_type"),
+    )
+
+
+class CustomFieldValue(db.Model):
+    """One field's value on one object. object_id is a plain integer, not
+    a real FK — it points at Site/Device/Circuit depending on the parent
+    CustomFieldValue.field.object_type, the same loosely-typed pattern
+    AuditLog.object_id already uses (this app doesn't turn on SQLite FK
+    enforcement anyway — see CLAUDE.md's delete-guard section). Because
+    there's no real FK, deleting a Site/Device/Circuit does NOT cascade
+    here automatically — routes/{sites,devices,circuits}.py's delete
+    routes must explicitly clear a deleted object's values."""
+    id = db.Column(db.Integer, primary_key=True)
+    field_id = db.Column(db.Integer, db.ForeignKey("custom_field_definition.id"), nullable=False)
+    object_id = db.Column(db.Integer, nullable=False)
+    value = db.Column(db.Text, nullable=True)
+
+    field = db.relationship("CustomFieldDefinition")
+
+    __table_args__ = (
+        db.UniqueConstraint("field_id", "object_id"),
     )

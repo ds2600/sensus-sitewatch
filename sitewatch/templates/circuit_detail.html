@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import util_pct, breadcrumb, circuit_status_badge, circuit_history_table %}
+{% from "_macros.html" import util_pct, breadcrumb, circuit_status_badge, circuit_history_table, custom_field_display %}
 {% block content %}
 {% set crumbs = [("Circuits", url_for('circuits.list_circuits'))] %}
 {% if circuit.parent %}
@@ -23,7 +23,9 @@
   </form>
   {% endif %}
 </div>
-<p>Role: {{ circuit.role.name }} ({{ circuit.role.tier }}) | Type: {{ 'bundle' if circuit.is_bundle else 'point-to-point' }}</p>
+<p>Role: {{ circuit.role.name }} ({{ circuit.role.tier }}) | Type: {{ 'bundle' if circuit.is_bundle else 'point-to-point' }}
+  {% if circuit.layer %}| Layer: {{ circuit.layer.name }}{% endif %}</p>
+{{ custom_field_display(custom_field_defs, custom_field_values) }}
 {% if circuit.effective_waypoints %}
 <p class="text-body-secondary small">
   Map route:
