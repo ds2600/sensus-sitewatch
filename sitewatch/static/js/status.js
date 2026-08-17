@@ -55,13 +55,15 @@ function updateAlerts(alerts) {
 function updatePoller(poller) {
   const symbol = document.getElementById("poller-status-symbol");
   if (symbol) {
-    if (poller.active) {
+    symbol.classList.remove("text-danger", "text-success", "text-warning");
+    if (poller.backed_off) {
       symbol.innerHTML = "&#9654;"; // ▶
-      symbol.classList.remove("text-danger");
+      symbol.classList.add("text-warning");
+    } else if (poller.active) {
+      symbol.innerHTML = "&#9654;"; // ▶
       symbol.classList.add("text-success");
     } else {
       symbol.innerHTML = "&#9724;"; // ■
-      symbol.classList.remove("text-success");
       symbol.classList.add("text-danger");
     }
   }
@@ -80,7 +82,7 @@ function updatePoller(poller) {
   const badge = document.getElementById("poller-status-badge");
   if (badge) {
     badge.textContent = poller.label;
-    badge.className = "badge " + (poller.active ? "bg-success" : "bg-danger");
+    badge.className = "badge " + (poller.backed_off ? "bg-warning text-dark" : (poller.active ? "bg-success" : "bg-danger"));
   }
   document.querySelectorAll("[data-poller-toggle]").forEach((btn) => {
     const isStart = btn.dataset.pollerToggle === "start";

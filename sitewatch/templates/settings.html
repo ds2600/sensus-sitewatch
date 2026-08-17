@@ -84,9 +84,16 @@
   <div class="tab-pane fade" id="poller" role="tabpanel">
     <div class="col-md-6 mt-3">
       <p class="mb-1">
-        <span id="poller-status-badge" class="badge {{ 'bg-success' if poller_status.active else 'bg-danger' }}">{{ poller_status.label }}</span>
+        <span id="poller-status-badge" class="badge {{ 'bg-warning text-dark' if poller_status.backed_off else ('bg-success' if poller_status.active else 'bg-danger') }}">{{ poller_status.label }}</span>
         {% if poller_status.interval_minutes %}<span class="text-body-secondary">every {{ poller_status.interval_minutes }} min</span>{% endif %}
       </p>
+      {% if poller_status.backed_off %}
+      <div class="alert alert-warning py-2 small mb-3">
+        Every device has failed {{ poller_status.consecutive_failures }} poll cycle(s) in a row.
+        Polling backed off to every {{ values.poller_backoff_minutes }} minutes. Resumes the normal
+        interval automatically once a device responds again.
+      </div>
+      {% endif %}
       <p class="mb-2 small text-body-secondary" id="poller-next-run"
          data-next-run="{{ poller_status.next_run_at or '' }}"
          data-state="{{ poller_status.state }}"
@@ -135,6 +142,14 @@
                form="settings-form" {{ 'checked' if values.poll_on_startup == '1' }}>
         <label class="form-check-label" for="poll_on_startup">Poll shortly after startup</label>
         <div class="form-text">Runs one poll cycle ~15 seconds after the app starts, instead of waiting for the first regular interval. Off by default.</div>
+      </div>
+      <div class="mb-3"><label class="form-label">Failure threshold (consecutive fully-failed cycles)</label>
+        <input class="form-control" name="poller_failure_threshold" value="{{ values.poller_failure_threshold }}" form="settings-form">
+        <div class="form-text">Cycles in a row where every device is unreachable before the poller backs off.</div>
+      </div>
+      <div class="mb-3"><label class="form-label">Backoff interval (minutes)</label>
+        <input class="form-control" name="poller_backoff_minutes" value="{{ values.poller_backoff_minutes }}" form="settings-form">
+        <div class="form-text">Polling cadence while backed off. Resumes the normal interval automatically once a device responds again.</div>
       </div>
       <button class="btn btn-primary btn-sm" form="settings-form">Save</button>
     </div>

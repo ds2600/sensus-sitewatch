@@ -67,6 +67,20 @@ def _append_link(lines):
         lines.append(f"<{url}|Open SiteWatch>")
 
 
+def _post_best_effort(payload):
+    """Shared delivery for every alert path that must never break its
+    caller over a bad webhook (poll cycles, poller backoff/recovery) — the
+    one exception is send_test_alert(), which deliberately raises so a
+    broken URL is caught from the Settings page, not discovered mid-outage."""
+    url = Setting.get("google_chat_webhook_url")
+    if not url:
+        return
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except requests.RequestException:
+        pass  # alert delivery failure shouldn't break the poll cycle
+
+
 def send_down_alerts(circuits):
     """circuits: every Circuit that just transitioned to down in this poll
     cycle/repoll action — call once with the whole batch, never once per
@@ -74,13 +88,38 @@ def send_down_alerts(circuits):
     so every caller can call this unconditionally after its own loop."""
     if not circuits:
         return
-    url = Setting.get("google_chat_webhook_url")
-    if not url:
-        return
-    try:
-        requests.post(url, json=build_payload(circuits), timeout=5)
-    except requests.RequestException:
-        pass  # alert delivery failure shouldn't break the poll cycle
+    _post_best_effort(build_payload(circuits))
+
+
+def build_poller_backoff_payload(consecutive_failures):
+    lines = [
+        f"\U0001F7E0 *Poller backed off* — every device failed "
+        f"{consecutive_failures} poll cycle{'s' if consecutive_failures != 1 else ''} in a row.",
+        "",
+        "Polling continues at a slower interval until a device responds again.",
+    ]
+    _append_link(lines)
+    return {"text": "\n".join(lines)}
+
+
+def build_poller_recovered_payload():
+    lines = [
+        "\U0001F7E2 *Poller recovered* — a device responded again. Polling resumed at the normal interval.",
+    ]
+    _append_link(lines)
+    return {"text": "\n".join(lines)}
+
+
+def send_poller_backoff_alert(consecutive_failures):
+    """Fired once, on the transition into backoff — see poller.py's
+    _apply_failure_backoff, which guards against calling this again on
+    every subsequent failed cycle while already backed off."""
+    _post_best_effort(build_poller_backoff_payload(consecutive_failures))
+
+
+def send_poller_recovered_alert():
+    """Fired once, on the transition back out of backoff."""
+    _post_best_effort(build_poller_recovered_payload())
 
 
 def build_test_payload():

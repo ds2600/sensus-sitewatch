@@ -57,6 +57,8 @@ class Setting(db.Model):
         "poller_max_workers": "8",
         "incident_number_prefix": "INC",
         "poll_on_startup": "0",
+        "poller_failure_threshold": "3",
+        "poller_backoff_minutes": "15",
     }
 
     @staticmethod

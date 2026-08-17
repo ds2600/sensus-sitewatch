@@ -35,7 +35,7 @@ from sitewatch import telemetry
 from sitewatch.snmp import SnmpError
 from sitewatch.snmp import new_engine as new_snmp_engine
 from sitewatch.status import recompute_bundle_state, rollup_degree_status
-from sitewatch.integrations.webhook_payload import send_down_alerts
+from sitewatch.integrations.webhook_payload import send_down_alerts, send_poller_backoff_alert, send_poller_recovered_alert
 from sitewatch import job_log, audit_log
 
 log = logging.getLogger(__name__)
@@ -71,10 +71,12 @@ def poll_all_devices():
     try:
         started = time.monotonic()
         device_count = 0
+        reachable_count = 0
         # Every circuit that goes down anywhere in this sweep lands here,
         # then one grouped webhook goes out at the very end — never one
         # per device/circuit. See webhook_payload.py's module docstring.
         alert_batch = []
+        cancelled = False
         monitored_ids = _monitored_interface_ids()
         devices_by_id = {d.id: d for d in Device.query.all()}
         snapshots = {device_id: _snapshot_device(device, monitored_ids)
@@ -107,9 +109,12 @@ def poll_all_devices():
                     for f in futures:
                         f.cancel()
                     log.warning("Poll cycle stopped by user after %d device(s).", device_count)
+                    cancelled = True
                     break
                 device = devices_by_id[futures[future]]
                 _apply_fetch_result(device, future.result())
+                if device.reachable:
+                    reachable_count += 1
                 # Recompute circuit/bundle state after every device, not once at
                 # the end of the whole sweep — otherwise a link that goes down on
                 # the very first device to finish wouldn't show as down until
@@ -127,12 +132,48 @@ def poll_all_devices():
         duration = time.monotonic() - started
         Setting.set("last_poll_duration_seconds", f"{duration:.1f}")
         Setting.set("last_poll_finished_at", datetime.utcnow().isoformat())
+        if not cancelled:
+            _apply_failure_backoff(device_count, reachable_count)
         db.session.commit()
         send_down_alerts(alert_batch)
         log.info("Poll cycle finished in %.1fs (%d devices, up to %d concurrent)",
                   duration, device_count, max_workers)
     finally:
         _currently_polling = False
+
+
+def _apply_failure_backoff(device_count, reachable_count):
+    """Circuit breaker for a network that's entirely down: once
+    poller_failure_threshold consecutive sweeps in a row see zero
+    reachable devices, backs the schedule off to poller_backoff_minutes
+    instead of continuing to hammer every device at the normal cadence,
+    and fires one Google Chat alert on the transition into backoff.
+    Recovers automatically — back to polling_interval_minutes, one more
+    alert — the moment any later sweep sees even a single device reachable
+    again. A cancelled sweep (see the `cancelled` flag in poll_all_devices)
+    never reaches this function at all: an incomplete sweep isn't a
+    reliable signal that every device actually failed. An empty device
+    list is also skipped — no devices means nothing to fail, not an
+    outage."""
+    if device_count == 0:
+        return
+    was_backed_off = Setting.get("poller_backed_off", "0") == "1"
+    if reachable_count == 0:
+        failures = Setting.get_int("poller_consecutive_failures", 0) + 1
+        Setting.set("poller_consecutive_failures", failures)
+        threshold = Setting.get_int("poller_failure_threshold")
+        if not was_backed_off and failures >= threshold:
+            Setting.set("poller_backed_off", "1")
+            reschedule_poller(Setting.get_int("poller_backoff_minutes"))
+            log.warning("Poller backed off after %d consecutive fully-failed cycles.", failures)
+            send_poller_backoff_alert(failures)
+    else:
+        Setting.set("poller_consecutive_failures", 0)
+        if was_backed_off:
+            Setting.set("poller_backed_off", "0")
+            reschedule_poller(Setting.get_int("polling_interval_minutes"))
+            log.info("Poller recovered — a device responded again. Resuming normal interval.")
+            send_poller_recovered_alert()
 
 
 def _monitored_interface_ids():
@@ -520,35 +561,47 @@ def get_poller_status():
     already finished), so the UI can offer a "View poller log" button and,
     while state is "polling", show real completed/total progress instead of
     the next-run countdown running past zero and calling an in-progress
-    sweep "overdue"."""
+    sweep "overdue". `backed_off`/`consecutive_failures` reflect the
+    failure-backoff circuit breaker (see _apply_failure_backoff) — `state`
+    itself stays waiting/polling either way, since backoff only changes the
+    cadence, not what's actually happening right now."""
     progress = None
     if _last_poll_job_id:
         job_entry = job_log.get_job(_last_poll_job_id)
         if job_entry:
             progress = {"completed": job_entry["completed"], "total": job_entry["total"]}
+    backed_off = Setting.get("poller_backed_off", "0") == "1"
+    consecutive_failures = Setting.get_int("poller_consecutive_failures", 0)
 
     if not poller_enabled_for_process():
         return {"state": "disabled", "label": "Not running in this process", "active": False,
                 "next_run_at": None, "interval_minutes": None,
-                "job_id": _last_poll_job_id, "progress": progress}
+                "job_id": _last_poll_job_id, "progress": progress,
+                "backed_off": backed_off, "consecutive_failures": consecutive_failures}
     if not scheduler.running:
         return {"state": "stopped", "label": "Stopped", "active": False,
                 "next_run_at": None, "interval_minutes": None,
-                "job_id": _last_poll_job_id, "progress": progress}
+                "job_id": _last_poll_job_id, "progress": progress,
+                "backed_off": backed_off, "consecutive_failures": consecutive_failures}
     job = scheduler.get_job(POLLER_JOB_ID)
-    interval_minutes = Setting.get_int("polling_interval_minutes")
+    interval_minutes = (Setting.get_int("poller_backoff_minutes") if backed_off
+                         else Setting.get_int("polling_interval_minutes"))
     if job is None or job.next_run_time is None:
         return {"state": "stopped", "label": "Stopped", "active": False,
                 "next_run_at": None, "interval_minutes": interval_minutes,
-                "job_id": _last_poll_job_id, "progress": progress}
+                "job_id": _last_poll_job_id, "progress": progress,
+                "backed_off": backed_off, "consecutive_failures": consecutive_failures}
     # APScheduler's next_run_time is tz-aware in the local system timezone;
     # normalize to UTC to match last_poll_finished_at's naive-UTC format
     # elsewhere on the Settings page.
     next_run_at = job.next_run_time.astimezone(timezone.utc).isoformat()
+    backoff_suffix = " (backed off)" if backed_off else ""
     if _currently_polling:
-        return {"state": "polling", "label": "Polling now", "active": True,
+        return {"state": "polling", "label": "Polling now" + backoff_suffix, "active": True,
                 "next_run_at": next_run_at, "interval_minutes": interval_minutes,
-                "job_id": _last_poll_job_id, "progress": progress}
-    return {"state": "waiting", "label": "Waiting for next cycle", "active": True,
+                "job_id": _last_poll_job_id, "progress": progress,
+                "backed_off": backed_off, "consecutive_failures": consecutive_failures}
+    return {"state": "waiting", "label": "Waiting for next cycle" + backoff_suffix, "active": True,
             "next_run_at": next_run_at, "interval_minutes": interval_minutes,
-            "job_id": _last_poll_job_id, "progress": progress}
+            "job_id": _last_poll_job_id, "progress": progress,
+            "backed_off": backed_off, "consecutive_failures": consecutive_failures}
