@@ -460,6 +460,12 @@ def set_incident_ticket(history_id):
                           {"incident_id": history.id,
                            "external_ticket": {"old": old_ticket, "new": history.external_ticket}})
     db.session.commit()
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        # ticket-form.js's ajax path — saves in place with no page reload,
+        # since a NOC operator entering several of these in a row can't
+        # afford a full-page round trip per ticket. Plain form POST (JS
+        # disabled/unavailable) still works via the redirect below.
+        return jsonify({"external_ticket": history.external_ticket})
     next_url = request.form.get("next")
     if not next_url or not next_url.startswith("/"):
         next_url = url_for("circuits.circuit_detail", circuit_id=history.circuit_id)

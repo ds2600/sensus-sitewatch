@@ -1,5 +1,7 @@
+from datetime import datetime, timedelta
+
 from sitewatch.extensions import db
-from sitewatch.models import Circuit, CircuitWaypoint, AlertMute, AuditLog
+from sitewatch.models import Circuit, CircuitWaypoint, AlertMute, AuditLog, CircuitStatusHistory
 from tests.factories import make_site, make_device, make_interface, make_role, make_circuit, make_bundle
 
 
@@ -186,3 +188,73 @@ def test_mute_and_unmute_circuit(app, admin_client):
         assert AlertMute.is_muted(circuit_id) is False
         entry = AuditLog.query.filter_by(object_type="Circuit", object_id=circuit_id, action="unmute").first()
         assert entry is not None
+
+
+# --- incident ticket # (dashboard's ajax-saved field) ---
+
+def _incident_row():
+    site_a, site_b = make_site(name="Ticket A"), make_site(name="Ticket B")
+    dev_a, dev_b = make_device(site_a), make_device(site_b)
+    iface_a, iface_b = make_interface(dev_a), make_interface(dev_b)
+    circuit = make_circuit(iface_a, iface_b, name="Ticket Circuit")
+    history = CircuitStatusHistory(
+        circuit_id=circuit.id, state="down",
+        started_at=datetime.utcnow() - timedelta(hours=1),
+        incident_number=f"INC-{circuit.id:06d}",
+    )
+    db.session.add(history)
+    db.session.flush()
+    return history
+
+
+def test_set_ticket_via_ajax_returns_json_no_redirect(app, admin_client):
+    with app.app_context():
+        history = _incident_row()
+        db.session.commit()
+        history_id = history.id
+
+    resp = admin_client.post(
+        f"/circuits/incidents/{history_id}/ticket",
+        data={"external_ticket": "TICK-123"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json() == {"external_ticket": "TICK-123"}
+    with app.app_context():
+        assert CircuitStatusHistory.query.get(history_id).external_ticket == "TICK-123"
+
+
+def test_set_ticket_without_ajax_header_still_redirects(app, admin_client):
+    with app.app_context():
+        history = _incident_row()
+        db.session.commit()
+        history_id = history.id
+
+    resp = admin_client.post(
+        f"/circuits/incidents/{history_id}/ticket",
+        data={"external_ticket": "TICK-456", "next": "/"},
+    )
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "/"
+    with app.app_context():
+        assert CircuitStatusHistory.query.get(history_id).external_ticket == "TICK-456"
+
+
+def test_set_ticket_blank_clears_it_and_is_audited(app, admin_client):
+    with app.app_context():
+        history = _incident_row()
+        history.external_ticket = "OLD-1"
+        db.session.commit()
+        history_id, circuit_id = history.id, history.circuit_id
+
+    admin_client.post(
+        f"/circuits/incidents/{history_id}/ticket",
+        data={"external_ticket": ""},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    with app.app_context():
+        assert CircuitStatusHistory.query.get(history_id).external_ticket is None
+        entry = (AuditLog.query.filter_by(object_type="Circuit", object_id=circuit_id, action="update")
+                  .order_by(AuditLog.id.desc()).first())
+        assert entry is not None
+        assert "external_ticket" in entry.details
