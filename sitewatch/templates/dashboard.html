@@ -21,7 +21,6 @@
   </select>
   {% endif %}
   <span id="last-updated" class="text-body-secondary small ms-auto" title="Time the last poll cycle finished"></span>
-  <button type="button" id="auto-refresh-toggle" class="btn btn-outline-secondary btn-sm">Auto-refresh: Off</button>
 </div>
 <div id="map" class="mb-4 rounded border"></div>
 
@@ -98,14 +97,12 @@
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
-<script src="{{ url_for('static', filename='js/auto_refresh.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ticket-form.js') }}"></script>
 <script>
   // Remembers the Recently cleared section's collapsed state across page
-  // loads via a cookie (not localStorage) — same mechanism auto-refresh
-  // uses (see auto_refresh.js), since dashboard.py reads this cookie
-  // server-side to render the correct initial state and avoid a flash of
-  // the wrong one before JS runs.
+  // loads via a cookie (not localStorage), since dashboard.py reads this
+  // cookie server-side to render the correct initial state and avoid a
+  // flash of the wrong one before JS runs.
   (() => {
     const COOKIE = "sitewatch_cleared_collapsed";
     const body = document.getElementById("recently-cleared-body");

@@ -17,21 +17,14 @@ function formatCountdown(iso) {
   return `${sign} ${m > 0 ? m + "m " : ""}${s}s`;
 }
 
-function formatElapsedSince(iso) {
-  const diffSec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  const m = Math.floor(diffSec / 60);
-  const s = diffSec % 60;
-  return m > 0 ? `${m}m ${s}s ago` : `${s}s ago`;
-}
-
-// Dashboard-only "Last updated" — the time the last poll cycle finished,
-// not a live view refresh. Ticks every second (see the setInterval below)
-// so the "X ago" part stays honest between the 15s /api/status polls.
+// Dashboard-only "Last updated" — the time the last poll cycle finished.
+// Refreshed whenever updatePoller() runs (the 15s /api/status poll); no
+// live tick of its own since it's just a fixed clock time, not a countdown.
 function updateLastUpdatedDisplay() {
   const el = document.getElementById("last-updated");
   if (!el) return;
   const iso = el.dataset.finishedAt;
-  el.textContent = iso ? `Last updated: ${formatClockTime(iso + "Z")} (${formatElapsedSince(iso + "Z")})` : "";
+  el.textContent = iso ? `Last updated: ${formatClockTime(iso + "Z")}` : "";
 }
 
 function updateNextRunDisplays() {
@@ -190,5 +183,4 @@ async function pollStatus() {
 
 pollStatus();
 setInterval(pollStatus, 15000);
-setInterval(updateLastUpdatedDisplay, 1000);
 setInterval(updateNextRunDisplays, 1000);
