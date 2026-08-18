@@ -19,6 +19,7 @@
   Last polled: {{ device.last_polled_at or 'never' }} |
   Last walked: {{ device.last_walked_at or 'never' }}
   {% if device.layer %}| Layer: {{ device.layer.name }}{% endif %}
+  {% if device.probe %}| Polled via: Probe {{ device.probe.name }}{% endif %}
 </p>
 {{ custom_field_display(custom_field_defs, custom_field_values) }}
 {% if current_user.is_admin %}

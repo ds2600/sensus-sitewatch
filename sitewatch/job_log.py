@@ -209,6 +209,16 @@ def log_line(job_id, message):
     _append(job_id, message)
 
 
+def finish_job(job_id, success, error=None):
+    """Public counterpart to run_job()'s automatic finish, for a job that
+    isn't run-to-completion on one thread — routes/probe_api.py starts a
+    Walk/Repoll job when a probe-owned device's button is clicked, then
+    finishes it here from a LATER, unrelated request once the probe
+    actually reports the result back. Every other Tail Modal job finishes
+    itself via run_job(); this is the one exception."""
+    _finish(job_id, success=success, error=error)
+
+
 def _finish(job_id, success, error=None, cancelled=False):
     with _lock:
         job = _jobs.get(job_id)

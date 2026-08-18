@@ -425,13 +425,71 @@ things apply on top of everything in 15.1–15.5:
 
 - [ ] `.env` has real `SECRET_KEY`/`ENCRYPTION_KEY`/`ADMIN_PASSWORD` values (not the ones from local dev), and is `chmod 600`
 - [ ] Logged in once and confirmed the admin password works through the reverse proxy over HTTPS
-- [ ] `journalctl -u sitewatch -f` shows poll cycles running (confirms `SITEWATCH_RUN_POLLER=1` took effect) — see section 16 if not
+- [ ] `journalctl -u sitewatch -f` shows poll cycles running (confirms `SITEWATCH_RUN_POLLER=1` took effect) — see section 17 if not
 - [ ] `--workers 1` in the systemd unit (see 15.2 — don't "fix" this without splitting out the poller first)
 - [ ] `instance/sitewatch.db` and `.env` are both included in whatever backup process you use (section 13); consider also keeping periodic JSON exports (Settings → Backup & restore) since those don't require stopping the service
 
 ---
 
-## 16. Troubleshooting
+## 16. Standalone probes
+
+For a site/segment the main server can't reach directly (NAT, firewall,
+VPN) — a `Probe` polls its assigned devices locally and reports back over
+HTTP, while the main server keeps polling everything else itself exactly
+as before. Same shape as a Zabbix proxy. See CLAUDE.md's architecture
+notes (item 10) for how this fits together internally.
+
+**1. Add the probe** — Settings → Probes → Add probe. The API key is
+generated and shown **once**, in a flash message right after — copy it
+now, it can't be viewed again.
+
+**2. Assign devices to it** — on each device's Edit page, set "Polled by"
+to that probe instead of "Directly". A device assigned to a probe is
+skipped by the main server's own poll cycle entirely.
+
+**3. Run the probe daemon** on the remote box, same repo checkout as the
+main app (clone or `git pull` there too — this is just a different
+entrypoint, not a separate codebase):
+
+```bash
+cd /opt/sitewatch          # same install steps as section 15.3 — venv, pip install -r requirements.txt
+export PROBE_SERVER_URL=https://sitewatch.example.com   # the main server, reachable from THIS box
+export PROBE_API_KEY=<the key from step 1>
+python -m sitewatch.probe
+```
+
+For a persistent service, copy `deploy/sitewatch-probe.service.example`
+to `/etc/systemd/system/sitewatch-probe.service` on the remote box (not
+the main server) and `systemctl enable --now` it, same pattern as 15.3.
+It never needs `SITEWATCH_RUN_POLLER=1` and never runs gunicorn/the Flask
+app — `sitewatch/probe.py` only ever imports `sitewatch.telemetry`
+(SNMP/simulator logic), so it never touches Flask/SQLAlchemy at runtime
+even though they're present in the same `pip install -r requirements.txt`.
+
+Optional env vars: `PROBE_INTERVAL_MINUTES` (default 2, matching
+`polling_interval_minutes`'s own default) and `PROBE_ACTION_POLL_SECONDS`
+(default 10 — how often it checks for a queued Walk/Repoll from the
+dashboard).
+
+**Walk/Repoll** on a probe-owned device's detail page work exactly like a
+directly-polled device's — same buttons, same Tail Modal — they just
+queue the request and the modal fills in once the probe checks in
+(usually within `PROBE_ACTION_POLL_SECONDS`), instead of running
+immediately.
+
+**If a probe stops checking in**, Settings → Probes shows it as Stale
+after `probe_stale_after_minutes` (Settings → Probes tab, default 15) —
+its devices show unreachable and one Google Chat alert fires on the
+transition, clearing automatically (with a matching recovery alert) the
+moment it reports again.
+
+`SITEWATCH_SIMULATE=1` works for the probe daemon exactly like it does
+for the main app — useful for trying this whole flow out with no real
+devices, same as section 14.
+
+---
+
+## 17. Troubleshooting
 
 **Device shows blue immediately after adding it**: check SNMP reachability manually first:
 ```bash

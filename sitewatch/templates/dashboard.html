@@ -20,7 +20,8 @@
     {% endfor %}
   </select>
   {% endif %}
-  <button type="button" id="auto-refresh-toggle" class="btn btn-outline-secondary btn-sm ms-auto">Auto-refresh: Off</button>
+  <span id="last-updated" class="text-body-secondary small ms-auto" title="Time the last poll cycle finished"></span>
+  <button type="button" id="auto-refresh-toggle" class="btn btn-outline-secondary btn-sm">Auto-refresh: Off</button>
 </div>
 <div id="map" class="mb-4 rounded border"></div>
 

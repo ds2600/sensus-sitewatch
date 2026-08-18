@@ -122,6 +122,38 @@ def send_poller_recovered_alert():
     _post_best_effort(build_poller_recovered_payload())
 
 
+def build_probe_stale_payload(probe):
+    lines = [
+        f"\U0001F7E0 *Probe stale: {probe.name}* — hasn't checked in for over "
+        f"{Setting.get_int('probe_stale_after_minutes')} minutes.",
+        "",
+        "Its devices are now shown unreachable until it checks in again.",
+    ]
+    _append_link(lines)
+    return {"text": "\n".join(lines)}
+
+
+def build_probe_recovered_payload(probe):
+    lines = [
+        f"\U0001F7E2 *Probe recovered: {probe.name}* — checked in again.",
+    ]
+    _append_link(lines)
+    return {"text": "\n".join(lines)}
+
+
+def send_probe_stale_alert(probe):
+    """Fired once, on the transition into staleness — see poller.py's
+    check_probe_staleness, which guards against calling this again on
+    every subsequent watchdog pass while a probe stays stale."""
+    _post_best_effort(build_probe_stale_payload(probe))
+
+
+def send_probe_recovered_alert(probe):
+    """Fired once, on the transition back out of staleness (the probe's
+    next successful report — see poller.py's apply_probe_report)."""
+    _post_best_effort(build_probe_recovered_payload(probe))
+
+
 def build_test_payload():
     """A fixed example message — not built from real data, since a
     realistic build_payload() call needs persisted Circuit/Site rows

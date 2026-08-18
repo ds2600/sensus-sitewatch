@@ -12,6 +12,17 @@ log = logging.getLogger(__name__)
 def perform_walk(device):
     log.info("Starting walk of %s (%s)...", device.hostname, device.mgmt_ip)
     discovered = telemetry.walk_interfaces(device)
+    return apply_walk_result(device, discovered)
+
+
+def apply_walk_result(device, discovered):
+    """The ORM-writing half of a walk — existing/new interface merge +
+    last_walked_at — split out of perform_walk so a probe-owned device's
+    walk can share it too: routes/probe_api.py's walk-result endpoint gets
+    a discovered dict of this exact shape from the probe (which ran
+    telemetry.walk_interfaces() itself, locally) and calls this directly,
+    skipping the walk_interfaces() call above since the probe already did
+    that part."""
     existing = {i.if_index: i for i in device.interfaces}
     new_count = 0
     for idx, data in discovered.items():

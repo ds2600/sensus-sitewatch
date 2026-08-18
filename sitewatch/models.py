@@ -16,6 +16,7 @@ CIRCUIT_STATES = ("up", "degraded", "down", "admin_down", "unreachable")
 SITE_TYPES = ("site", "passthrough", "minor")
 USER_ROLES = ("admin", "read_only")
 CUSTOM_FIELD_OBJECT_TYPES = ("site", "device", "circuit")
+PROBE_ACTIONS = ("walk", "repoll")
 
 
 class User(UserMixin, db.Model):
@@ -59,6 +60,7 @@ class Setting(db.Model):
         "poll_on_startup": "0",
         "poller_failure_threshold": "3",
         "poller_backoff_minutes": "15",
+        "probe_stale_after_minutes": "15",
     }
 
     @staticmethod
@@ -115,6 +117,36 @@ class Layer(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class Probe(db.Model):
+    """A standalone remote poller (see sitewatch/probe.py) — polls the
+    Devices assigned to it (Device.probe_id) over its own local network
+    access and reports telemetry back over HTTP, for sites/segments the
+    main server can't reach directly (NAT/firewall/VPN). api_key is the
+    probe's bearer-token credential (see routes/probe_api.py's
+    probe_required), encrypted at rest exactly like Device's SNMP/SSH
+    credentials — never logged, never in a backup.py export. last_seen_at
+    is bumped on every successful report; poller.py's staleness watchdog
+    marks a probe's devices unreachable once this goes stale. `stale`
+    tracks whether that's already happened, so the watchdog fires its one
+    Google-Chat alert only on the transition into/out of staleness, not
+    on every check while it stays that way — same one-alert-per-
+    transition shape as the poller failure-backoff feature."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    api_key_enc = db.Column(db.String(255), nullable=True)
+    stale = db.Column(db.Boolean, default=False, server_default="0")
+    last_seen_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def api_key(self):
+        return decrypt(self.api_key_enc)
+
+    @api_key.setter
+    def api_key(self, value):
+        self.api_key_enc = encrypt(value)
+
+
 class Site(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -163,6 +195,11 @@ class Device(db.Model):
     source = db.Column(db.String(20), default="manual")
     out_of_sync = db.Column(db.Boolean, default=False)
     layer_id = db.Column(db.Integer, db.ForeignKey("layer.id"), nullable=True)
+    # NULL (default) = polled directly by the main server, same as before
+    # this existed. Set = the main poller skips this device entirely (see
+    # poller.py's poll_all_devices) — it's polled by that Probe instead,
+    # which reports telemetry back via routes/probe_api.py.
+    probe_id = db.Column(db.Integer, db.ForeignKey("probe.id"), nullable=True)
 
     reachable = db.Column(db.Boolean, default=True)
     last_walked_at = db.Column(db.DateTime, nullable=True)
@@ -172,6 +209,7 @@ class Device(db.Model):
     interfaces = db.relationship("Interface", backref="device", lazy=True,
                                   cascade="all, delete-orphan")
     layer = db.relationship("Layer", backref="devices", foreign_keys=[layer_id])
+    probe = db.relationship("Probe", backref="devices", foreign_keys=[probe_id])
 
     # --- credential helpers: callers never touch *_enc columns directly ---
     @property
@@ -588,3 +626,25 @@ class CustomFieldValue(db.Model):
     __table_args__ = (
         db.UniqueConstraint("field_id", "object_id"),
     )
+
+
+class ProbeAction(db.Model):
+    """A queued Walk/Repoll for a probe-owned Device (Device.probe_id set)
+    — probes are pull-only (often behind NAT/firewall, can't accept
+    inbound connections), so an on-demand action can't run synchronously
+    the way it does for a directly-polled device. devices.py's walk_
+    device/repoll_device routes create one of these instead of running
+    the action inline; routes/probe_api.py's pending-actions endpoint
+    hands it to the probe on its next check-in, and its walk-result/report
+    endpoints mark completed_at and finish job_id's job_log entry once the
+    probe reports back — same Tail Modal, same job_id, just closed out by
+    a later request instead of the one that started it."""
+    id = db.Column(db.Integer, primary_key=True)
+    probe_id = db.Column(db.Integer, db.ForeignKey("probe.id"), nullable=False)
+    device_id = db.Column(db.Integer, db.ForeignKey("device.id"), nullable=False)
+    action = db.Column(db.String(20), nullable=False)  # walk | repoll — see PROBE_ACTIONS
+    job_id = db.Column(db.String(64), nullable=False)
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    device = db.relationship("Device")

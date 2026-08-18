@@ -1,19 +1,28 @@
 import os
 from datetime import datetime
-from flask import Flask, render_template
 from dotenv import load_dotenv
-
-from sitewatch.extensions import db, login_manager, scheduler
 
 load_dotenv()
 
 # SemVer. Bump on every user-facing release; GitHub Releases tags match
 # this (vX.Y.Z). Surfaced in the UI footer (see inject_app_name below) so
 # anyone looking at a running instance can tell what's actually deployed.
-__version__ = "0.14.1"
+__version__ = "0.15.0"
 
 
 def create_app():
+    # Flask/extensions imports deferred to inside create_app() rather than
+    # this file's top level: sitewatch/probe.py (the standalone remote
+    # poller) only ever imports sitewatch.telemetry, but importing ANY
+    # sitewatch.* submodule runs this package's __init__.py first —
+    # top-level `from flask import ...`/`from sitewatch.extensions import
+    # ...` would drag Flask/SQLAlchemy/APScheduler into that import
+    # regardless, defeating the point of a lightweight remote-box daemon.
+    # Deferred here, they're only ever imported when create_app() is
+    # actually called, which sitewatch.probe never does.
+    from flask import Flask, render_template
+    from sitewatch.extensions import db, login_manager, scheduler
+
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
     db_path = os.environ.get("DATABASE_PATH", "instance/sitewatch.db")
@@ -43,6 +52,7 @@ def create_app():
     from sitewatch.routes.api import api_bp
     from sitewatch.routes.regions import regions_bp
     from sitewatch.routes.audit import audit_bp
+    from sitewatch.routes.probe_api import probe_api_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -53,6 +63,7 @@ def create_app():
     app.register_blueprint(api_bp)
     app.register_blueprint(regions_bp)
     app.register_blueprint(audit_bp)
+    app.register_blueprint(probe_api_bp)
 
     # API docs (Swagger UI) — reads sitewatch/static/openapi.json, which
     # documents api_bp's endpoints by hand (kept in sync manually, same as

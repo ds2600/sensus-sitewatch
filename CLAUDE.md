@@ -18,9 +18,13 @@ site/circuit status on a Leaflet map. Full spec and setup steps: README.md.
    coding goes through `rollup_degree_status()` and `compute_site_status()`.
 3. `sitewatch/poller.py` — the polling loop and the down-threshold debounce.
    Runs on APScheduler, one pass per `polling_interval_minutes` setting.
-4. `sitewatch/telemetry.py` — the only module poller.py and the walk route
-   call. Routes to `snmp.py` or `simulator.py` based on `SITEWATCH_SIMULATE`.
-   Don't call either backend directly from outside this file.
+4. `sitewatch/telemetry.py` — the only module poller.py, the walk route,
+   and `sitewatch/probe.py` call. Routes to `snmp.py` or `simulator.py`
+   based on `SITEWATCH_SIMULATE`. Don't call either backend directly from
+   outside this file. Deliberately has zero Flask/SQLAlchemy/APScheduler
+   imports — DeviceSnapshot/IfaceSnapshot/fetch_device_telemetry live
+   here rather than in poller.py specifically so probe.py can import this
+   module as a plain library with none of the web app's dependencies.
 5. `sitewatch/snmp.py` — pysnmp wrappers. Pinned to pysnmp 4.4.x hlapi
    (sync style). Upgrading pysnmp means rewriting this file for the async
    v6.x API — nothing else depends on pysnmp's internals directly. Note:
@@ -47,6 +51,25 @@ site/circuit status on a Leaflet map. Full spec and setup steps: README.md.
    "sites" alone doesn't touch devices even though they reference
    site_id). Export never includes device credentials — see the module
    docstring. See README.md section 13.
+10. `sitewatch/probe.py` + `sitewatch/routes/probe_api.py` — the
+    standalone remote poller (Zabbix-proxy-style) for devices the main
+    server can't reach directly. A `Device` with `probe_id` set is
+    skipped by the in-process poller entirely; the named `Probe` polls it
+    locally and reports back over `probe_api.py`'s endpoints
+    (`probe_required` in `auth.py` — bearer-token auth, not a browser
+    session). `poller.py`'s `apply_probe_report()` feeds a probe's report
+    through the exact same apply/debounce/alert path
+    `poll_all_devices()`/`poll_device_now()` use — the acquisition method
+    is the only thing that differs. On-demand Walk/Repoll for a
+    probe-owned device queues a `ProbeAction` (same Tail Modal/job_id,
+    just finished by a later request once the probe reports back —
+    `job_log.finish_job()`) instead of running synchronously, since a
+    probe is pull-only and the server usually can't reach it on demand.
+    A probe that stops checking in gets marked `stale` by
+    `poller.py`'s `check_probe_staleness()` watchdog (registered in
+    `start_poller()`, runs every minute), which marks its devices
+    unreachable and fires one alert on the transition, same shape as the
+    poller's own failure-backoff feature.
 
 ## Status model — the thing most likely to need care
 
@@ -251,7 +274,14 @@ practice:
   README.md section 15.2) — scaling web workers means scaling poll
   cycles and duplicate alerts right along with them. Splitting the poller
   into its own process is the real fix if this app ever needs more than
-  one worker; not implemented.
+  one worker; not implemented. (Not the same problem `sitewatch/probe.py`
+  solves — a probe is about *reachability* to a remote segment, one probe
+  per assigned device, not sharing/scaling the central poller's own work.)
+- Probes: no key rotation UI (regenerate by deleting and re-adding the
+  probe), no per-probe polling interval configurable from the central
+  Settings UI (set via that probe's own `PROBE_INTERVAL_MINUTES`), and no
+  failover — a device is assigned to exactly one probe, admin-picked, no
+  automatic reassignment if that probe goes stale.
 
 ## Running locally
 

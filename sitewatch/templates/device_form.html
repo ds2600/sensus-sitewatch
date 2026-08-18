@@ -29,6 +29,15 @@
     </select>
     <div class="form-text">Controls dashboard map visibility. None = visible on every layer. <a href="{{ url_for('settings.index') }}#layers">Manage layers</a>.</div>
   </div>
+  <div class="mb-3"><label class="form-label">Polled by</label>
+    <select class="form-select" name="probe_id">
+      <option value="">Directly (this server)</option>
+      {% for p in probes %}
+      <option value="{{ p.id }}" {{ 'selected' if device and device.probe_id == p.id }}>Probe: {{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">A probe polls this device locally and reports back, for devices this server can't reach directly. <a href="{{ url_for('settings.index') }}#probes">Manage probes</a>.</div>
+  </div>
   <div class="mb-3"><label class="form-label">SNMP version</label>
     <select class="form-select" name="snmp_version" onchange="toggleSnmpFields(this.value)" id="snmp_version_select">
       {% for v in snmp_versions %}<option value="{{ v }}" {{ 'selected' if device and device.snmp_version==v }}>{{ v }}</option>{% endfor %}

@@ -1,0 +1,25 @@
+# Copy to /etc/systemd/system/sitewatch-probe.service on the REMOTE box
+# the probe runs on (not the main SiteWatch server) — see README section
+# 16. Same repo checkout as the main app (this is just a different
+# entrypoint), but this box never needs SITEWATCH_RUN_POLLER=1 and never
+# runs gunicorn/the Flask app itself.
+
+[Unit]
+Description=Sensus SiteWatch standalone probe
+After=network.target
+
+[Service]
+Type=simple
+User=sitewatch
+Group=sitewatch
+WorkingDirectory=/opt/sitewatch
+Environment=PROBE_SERVER_URL=https://sitewatch.example.com
+Environment=PROBE_API_KEY=replace-with-the-key-shown-once-in-settings
+# Uncomment only when testing without real device access:
+# Environment=SITEWATCH_SIMULATE=1
+ExecStart=/opt/sitewatch/venv/bin/python -m sitewatch.probe
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

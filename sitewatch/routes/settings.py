@@ -1,4 +1,5 @@
 import json
+import secrets
 import requests
 from datetime import datetime
 
@@ -9,7 +10,7 @@ from sitewatch.auth import admin_required
 from sitewatch.extensions import db
 from sitewatch.models import (
     Setting, CircuitRole, Circuit, Region, Site, Device, User, USER_ROLES,
-    Layer, CustomFieldDefinition, CustomFieldValue, CUSTOM_FIELD_OBJECT_TYPES,
+    Layer, CustomFieldDefinition, CustomFieldValue, CUSTOM_FIELD_OBJECT_TYPES, Probe,
 )
 from sitewatch.integrations import netbox
 from sitewatch.integrations.webhook_payload import send_down_alerts, send_test_alert
@@ -61,6 +62,7 @@ def index():
     return render_template("settings.html", values=values, roles=CircuitRole.query.all(),
                             site_regions=Region.query.order_by(Region.name).all(),
                             layers=Layer.query.order_by(Layer.name).all(),
+                            probes=Probe.query.order_by(Probe.name).all(),
                             custom_fields=CustomFieldDefinition.query.order_by(
                                 CustomFieldDefinition.object_type, CustomFieldDefinition.name).all(),
                             custom_field_object_types=CUSTOM_FIELD_OBJECT_TYPES,
@@ -288,6 +290,44 @@ def delete_layer(layer_id):
     name = layer.name
     db.session.delete(layer)
     audit_log.record("delete", "Layer", layer_id, name)
+    db.session.commit()
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/probes/add", methods=["POST"])
+@admin_required
+def add_probe():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Name a probe before adding it.")
+        return redirect(url_for("settings.index"))
+    if Probe.query.filter_by(name=name).first():
+        flash(f"A probe named '{name}' already exists.")
+        return redirect(url_for("settings.index"))
+    probe = Probe(name=name)
+    probe.api_key = secrets.token_urlsafe(32)
+    db.session.add(probe)
+    db.session.flush()
+    audit_log.record("create", "Probe", probe.id, probe.name)
+    db.session.commit()
+    # Shown once — api_key_enc is the only place it's stored after this,
+    # and that never gets decrypted back out through the UI again (same
+    # policy as every other credential in this app). Copy it into the
+    # probe's own PROBE_API_KEY config now.
+    flash(f"Probe '{probe.name}' added. API key (copy it now, shown only once): {probe.api_key}")
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/probes/<int:probe_id>/delete", methods=["POST"])
+@admin_required
+def delete_probe(probe_id):
+    probe = Probe.query.get_or_404(probe_id)
+    if Device.query.filter_by(probe_id=probe.id).first():
+        flash(f"'{probe.name}' is in use by a device — reassign it first.")
+        return redirect(url_for("settings.index"))
+    name = probe.name
+    db.session.delete(probe)
+    audit_log.record("delete", "Probe", probe_id, name)
     db.session.commit()
     return redirect(url_for("settings.index"))
 

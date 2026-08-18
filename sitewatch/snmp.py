@@ -95,7 +95,7 @@ def new_engine():
     than one GET/WALK against the same device in a row should build one of
     these once and pass it into every call via the `engine` param rather
     than leaving it to default (which builds a throwaway one per call).
-    See poller.py's _fetch_device_telemetry for the pattern this exists
+    See telemetry.py's fetch_device_telemetry for the pattern this exists
     for — creating one per GET was most of what made poll cycles CPU-heavy
     enough to lag the web process alongside them."""
     return SnmpEngine()

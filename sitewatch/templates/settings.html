@@ -25,6 +25,9 @@
     <button class="nav-link" id="layers-tab" data-bs-toggle="tab" data-bs-target="#layers" type="button" role="tab">Layers</button>
   </li>
   <li class="nav-item" role="presentation">
+    <button class="nav-link" id="probes-tab" data-bs-toggle="tab" data-bs-target="#probes" type="button" role="tab">Probes</button>
+  </li>
+  <li class="nav-item" role="presentation">
     <button class="nav-link" id="custom-fields-tab" data-bs-toggle="tab" data-bs-target="#custom-fields" type="button" role="tab">Custom fields</button>
   </li>
   <li class="nav-item" role="presentation">
@@ -246,6 +249,58 @@
         <input class="form-control" name="name" placeholder="Layer name" required>
         <button class="btn btn-outline-primary">Add layer</button>
       </form>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="probes" role="tabpanel">
+    <div class="mt-3">
+      <p class="text-body-secondary small">
+        A standalone remote poller for devices this server can't reach directly (see sitewatch/probe.py). Assign a
+        probe to a device on the device's edit form. A probe with no report in
+        {{ values.probe_stale_after_minutes }} minutes is marked stale and its devices show unreachable.
+      </p>
+      <table class="table table-sm col-md-8">
+        <thead><tr><th>Name</th><th>Status</th><th>Last seen</th><th></th></tr></thead>
+        <tbody>
+          {% for p in probes %}
+          <tr>
+            <td>{{ p.name }}</td>
+            <td>
+              {% if p.stale %}
+              <span class="badge bg-danger">Stale</span>
+              {% elif p.last_seen_at %}
+              <span class="badge bg-success">OK</span>
+              {% else %}
+              <span class="badge bg-secondary">Never checked in</span>
+              {% endif %}
+            </td>
+            <td>{{ p.last_seen_at.strftime('%Y-%m-%d %H:%M') if p.last_seen_at else '-' }} UTC</td>
+            <td>
+              <form method="post" action="{{ url_for('settings.delete_probe', probe_id=p.id) }}"
+                    onsubmit="return confirm('Delete probe {{ p.name }}?');">
+                <button class="btn btn-outline-danger btn-sm">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-muted">None yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <form method="post" action="{{ url_for('settings.add_probe') }}" class="d-flex gap-2 col-md-6">
+        <input class="form-control" name="name" placeholder="Probe name" required>
+        <button class="btn btn-outline-primary">Add probe</button>
+      </form>
+      <div class="form-text mt-2 mb-3">
+        Adding a probe generates its API key, shown once in a flash message — copy it into that probe's
+        PROBE_API_KEY config right away, since it can't be viewed again after that.
+      </div>
+      <div class="mb-3 col-md-4"><label class="form-label">Stale after (minutes)</label>
+        <input class="form-control" name="probe_stale_after_minutes" value="{{ values.probe_stale_after_minutes }}"
+               form="settings-form">
+        <div class="form-text">No report from a probe in this long marks its devices unreachable and sends one alert.</div>
+      </div>
+      <button class="btn btn-primary btn-sm" form="settings-form">Save</button>
     </div>
   </div>
 

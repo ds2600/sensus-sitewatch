@@ -5,7 +5,7 @@ object has a real id, but never commits — callers/fixtures own the
 transaction boundary.
 """
 from sitewatch.extensions import db
-from sitewatch.models import Site, Device, Interface, CircuitRole, Circuit, Layer, CustomFieldDefinition
+from sitewatch.models import Site, Device, Interface, CircuitRole, Circuit, Layer, CustomFieldDefinition, Probe
 
 _lat = [40.0]  # cheap incrementing coordinate so sites never collide
 
@@ -42,14 +42,27 @@ def make_custom_field(object_type, name=None):
     return field
 
 
-def make_device(site, hostname=None, reachable=True, layer=None):
+def make_device(site, hostname=None, reachable=True, layer=None, probe=None):
     hostname = hostname or f"{site.name.lower().replace(' ', '-')}-dev"
     device = Device(site_id=site.id, hostname=hostname, mgmt_ip="10.0.0.1",
                      vendor="ios-xe", snmp_version="v2c", reachable=reachable,
-                     layer_id=layer.id if layer else None)
+                     layer_id=layer.id if layer else None,
+                     probe_id=probe.id if probe else None)
     db.session.add(device)
     db.session.flush()
     return device
+
+
+_probe_seq = [0]
+
+
+def make_probe(name=None, api_key="test-probe-key"):
+    _probe_seq[0] += 1
+    probe = Probe(name=name or f"probe-{_probe_seq[0]}")
+    probe.api_key = api_key
+    db.session.add(probe)
+    db.session.flush()
+    return probe
 
 
 _if_index = [0]

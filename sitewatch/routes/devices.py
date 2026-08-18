@@ -5,7 +5,7 @@ from flask_login import login_required
 
 from sitewatch.auth import admin_required
 from sitewatch.extensions import db
-from sitewatch.models import Device, Site, Circuit, Layer, CircuitStatusHistory, VENDORS, SNMP_VERSIONS
+from sitewatch.models import Device, Site, Circuit, Layer, Probe, CircuitStatusHistory, ProbeAction, VENDORS, SNMP_VERSIONS
 from sitewatch.discovery import perform_walk
 from sitewatch.poller import poll_device_now
 from sitewatch import job_log, cooldown, audit_log, custom_fields
@@ -65,12 +65,14 @@ def add_device():
             site_id=site.id, hostname=f["hostname"], mgmt_ip=f["mgmt_ip"],
             vendor=f["vendor"], snmp_version=f["snmp_version"], source="manual",
             layer_id=f.get("layer_id", type=int) or None,
+            probe_id=f.get("probe_id", type=int) or None,
         )
         _apply_credentials(device, f)
         db.session.add(device)
         db.session.flush()
         details = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
-                   "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id}
+                   "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id,
+                   "probe_id": device.probe_id}
         if _credentials_touched(f):
             details["credentials_updated"] = True
         details.update(custom_fields.set_values("device", device.id, f))
@@ -81,6 +83,7 @@ def add_device():
                             sites=Site.query.filter(Site.site_type.in_(["site", "minor"])).all(),
                             vendors=VENDORS, snmp_versions=SNMP_VERSIONS,
                             layers=Layer.query.order_by(Layer.name).all(),
+                            probes=Probe.query.order_by(Probe.name).all(),
                             custom_field_defs=custom_fields.definitions_for("device"), custom_field_values={},
                             preselected_site_id=request.args.get("site_id", type=int))
 
@@ -239,16 +242,19 @@ def edit_device(device_id):
             flash("Passthrough sites can't have devices assigned.")
             return redirect(url_for("devices.edit_device", device_id=device_id))
         before = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
-                  "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id}
+                  "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id,
+                  "probe_id": device.probe_id}
         device.site_id = site.id
         device.hostname = f["hostname"]
         device.mgmt_ip = f["mgmt_ip"]
         device.vendor = f["vendor"]
         device.snmp_version = f["snmp_version"]
         device.layer_id = f.get("layer_id", type=int) or None
+        device.probe_id = f.get("probe_id", type=int) or None
         _apply_credentials(device, f)
         after = {"site_id": device.site_id, "hostname": device.hostname, "mgmt_ip": device.mgmt_ip,
-                 "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id}
+                 "vendor": device.vendor, "snmp_version": device.snmp_version, "layer_id": device.layer_id,
+                 "probe_id": device.probe_id}
         diff = audit_log.diff_fields(before, after)
         if _credentials_touched(f):
             diff["credentials_updated"] = True
@@ -261,6 +267,7 @@ def edit_device(device_id):
                             sites=Site.query.filter(Site.site_type.in_(["site", "minor"])).all(),
                             vendors=VENDORS, snmp_versions=SNMP_VERSIONS,
                             layers=Layer.query.order_by(Layer.name).all(),
+                            probes=Probe.query.order_by(Probe.name).all(),
                             custom_field_defs=custom_fields.definitions_for("device"),
                             custom_field_values=custom_fields.values_for("device", device.id))
 
@@ -284,6 +291,19 @@ def delete_device(device_id):
     return redirect(url_for("devices.list_devices"))
 
 
+def _queue_probe_action(device, action, job_id):
+    """Walk/Repoll for a probe-owned device can't run synchronously — the
+    probe is often behind NAT/firewall and pull-only, so the server can't
+    reach it on demand. Queues a ProbeAction instead; routes/probe_api.py's
+    pending-actions endpoint hands it to the probe on its next check-in
+    (~10s, its own fast timer) and its walk-result/report endpoints finish
+    this same job_id once the probe reports back — same Tail Modal, just
+    closed out by a later request instead of this one."""
+    db.session.add(ProbeAction(probe_id=device.probe_id, device_id=device.id, action=action, job_id=job_id))
+    job_log.log_line(job_id, f"Queued for Probe {device.probe.name} — waiting for it to check in...")
+    db.session.commit()
+
+
 @devices_bp.route("/<int:device_id>/walk", methods=["POST"])
 @admin_required
 def walk_device(device_id):
@@ -294,12 +314,15 @@ def walk_device(device_id):
         return jsonify({"error": f"Wait {wait}s before hitting {hostname} again."}), 429
     job_id = job_log.start_job(f"Walking {hostname}")
 
-    def work():
-        d = Device.query.get_or_404(device_id)
-        perform_walk(d)
-        db.session.commit()
+    if device.probe_id:
+        _queue_probe_action(device, "walk", job_id)
+    else:
+        def work():
+            d = Device.query.get_or_404(device_id)
+            perform_walk(d)
+            db.session.commit()
 
-    job_log.run_in_background(job_id, work, current_app._get_current_object())
+        job_log.run_in_background(job_id, work, current_app._get_current_object())
     return jsonify({"job_id": job_id, "label": f"Walking {hostname}",
                      "redirect": url_for("devices.device_detail", device_id=device_id)})
 
@@ -314,13 +337,16 @@ def repoll_device(device_id):
         return jsonify({"error": f"Wait {wait}s before hitting {hostname} again."}), 429
     job_id = job_log.start_job(f"Repolling {hostname}")
 
-    def work():
-        d = Device.query.get_or_404(device_id)
-        poll_device_now(d)
-        if not d.reachable and not _has_snmp_credentials(d):
-            job_log.log_line(job_id, "NOTE: no SNMP credentials set — add them on the Edit page.")
+    if device.probe_id:
+        _queue_probe_action(device, "repoll", job_id)
+    else:
+        def work():
+            d = Device.query.get_or_404(device_id)
+            poll_device_now(d)
+            if not d.reachable and not _has_snmp_credentials(d):
+                job_log.log_line(job_id, "NOTE: no SNMP credentials set — add them on the Edit page.")
 
-    job_log.run_in_background(job_id, work, current_app._get_current_object())
+        job_log.run_in_background(job_id, work, current_app._get_current_object())
     return jsonify({"job_id": job_id, "label": f"Repolling {hostname}",
                      "redirect": url_for("devices.device_detail", device_id=device_id)})
 
